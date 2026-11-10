@@ -2,8 +2,8 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "installCommand": "true",
-  "buildCommand": "node --check app.js && node --check supabaseClient.js",
-  "outputDirectory": ".",
+  "buildCommand": "node --check app.js && node --check supabaseClient.js && rm -rf dist && mkdir -p dist && cp index.html app.js supabaseClient.js favicon* apple-touch-icon.png logo* dist/",
+  "outputDirectory": "dist",
   "headers": [
     {
       "source": "/(.*)",
