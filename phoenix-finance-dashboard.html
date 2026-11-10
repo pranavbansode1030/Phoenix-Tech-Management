@@ -325,6 +325,25 @@
           </div>
         </div>
 
+        <!-- Authenticated Session Card -->
+        <div class="px-4 py-3 border-b border-[#024d39] bg-[#014d39]/40 space-y-2">
+          <div class="flex items-center gap-2.5">
+            <div class="relative shrink-0">
+              <div id="founder-avatar-text" class="w-9 h-9 rounded-xl bg-[#fffde8] text-[#026047] font-black text-xs flex items-center justify-center shadow-sm">
+                PB
+              </div>
+              <span id="founder-crown-badge" class="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-[#fffde8] text-[#026047] flex items-center justify-center text-[10px] font-bold shadow ring-1 ring-[#026047]">👑</span>
+            </div>
+            <div class="min-w-0 flex-1">
+              <div id="founder-name" class="text-xs font-extrabold text-[#fffde8] truncate">Pranav Bansode</div>
+              <div id="founder-designation-badge" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-[#fffde8] text-[#026047] mt-0.5">
+                👑 FOUNDER &amp; DIRECTOR
+              </div>
+            </div>
+          </div>
+          <div id="founder-authority-box" class="text-[10px] text-[#fffde8]/80 space-y-0.5"></div>
+        </div>
+
         <!-- Role-Based Dynamic Navigation Tabs (Customized per Authenticated Member) -->
         <nav id="sidebar-nav" class="p-3 space-y-1.5 flex-1 text-xs">
           <!-- Section: Executive Governance -->
@@ -462,6 +481,7 @@
               <option value="previous_month">Previous Month (October 2026)</option>
               <option value="last_3_months">Last 3 Months</option>
               <option value="current_fy">Current FY 2026-27</option>
+              <option value="all_time">All Time</option>
             </select>
           </div>
 
@@ -624,8 +644,12 @@
                   Task Deliverables
                 </button>
               </div>
-              <div class="text-[11px] text-slate-500">
-                1-Click Director Signatory Clearance
+              <div class="flex items-center gap-2">
+                <span class="text-[11px] text-slate-500">1-Click Director Signatory Clearance</span>
+                <button id="btn-approve-all-pending" onclick="approveAllPendingRequests()"
+                  class="px-3 py-1.5 rounded-lg bg-[#026047] hover:bg-[#024d39] text-[#fffde8] font-bold text-xs shadow-sm transition flex items-center gap-1 cursor-pointer">
+                  <span>⚡</span> Approve All Pending
+                </button>
               </div>
             </div>
 
@@ -650,6 +674,9 @@
                 </tbody>
               </table>
             </div>
+
+            <!-- Client Acquisition & 4-Step Delivery Pipeline -->
+            <div id="approvals-lead-pipeline"></div>
 
           </section>
 
@@ -728,6 +755,7 @@
                   <option value="ALL">All Team Members</option>
                   <option value="mem-02">Arshad Shaikh (Co-Founder)</option>
                   <option value="mem-03">Vivek Gajdhane (Technical)</option>
+                  <option value="mem-04">Aryan Bhore (Research Lead)</option>
                 </select>
                 <select id="task-status-filter" onchange="renderAssignProjects()"
                   class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-slate-800 dark:text-slate-200 text-xs">
@@ -783,6 +811,9 @@
             <div id="allocated-work-container" class="space-y-4">
               <!-- Rendered dynamically by app.js -->
             </div>
+
+            <!-- Client Acquisition & 4-Step Delivery Pipeline -->
+            <div id="allocated-lead-pipeline"></div>
 
           </section>
 
@@ -962,6 +993,8 @@
                   <option value="ALL">All Statuses</option>
                   <option value="PENDING">Pending Founder Approval</option>
                   <option value="APPROVED">Approved by Director</option>
+                  <option value="REJECTED">Rejected</option>
+                  <option value="REVERSED">Reversed</option>
                 </select>
               </div>
               <div class="text-[11px] text-slate-500">
@@ -1069,12 +1102,31 @@
               <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
                 <div>
                   <h3 class="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">Company Capital
-                    Reserves & Ring-Fencing</h3>
-                  <p class="text-[11px] text-slate-500">Earmarked reserves vs unencumbered lighthearted operating cash
+                    Reserves &amp; Ring-Fencing</h3>
+                  <p class="text-[11px] text-slate-500">Earmarked reserves vs unencumbered operating cash
                   </p>
                 </div>
+                <button onclick="openAllocateReserveModal()"
+                  class="px-3 py-1 rounded-lg bg-[#026047] text-[#fffde8] text-xs font-bold hover:bg-[#024d39] transition">
+                  + Allocate Reserve
+                </button>
               </div>
               <div id="reserves-breakdown-container" class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <!-- Rendered by app.js -->
+              </div>
+            </div>
+
+            <!-- Executive Security & Financial Audit Log -->
+            <div
+              class="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+              <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+                <div>
+                  <h3 class="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">Executive Audit &amp; Governance Trail</h3>
+                  <p class="text-[11px] text-slate-500">Immutable record of approvals, reversals, payouts, and role actions</p>
+                </div>
+                <span class="text-[10px] px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-mono">Audited</span>
+              </div>
+              <div id="audit-logs-container" class="overflow-x-auto">
                 <!-- Rendered by app.js -->
               </div>
             </div>
@@ -1140,7 +1192,7 @@
         <div class="space-y-3 text-xs">
           <div
             class="p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-[11px] text-amber-800 dark:text-amber-300 flex items-start gap-2">
-            <i data-lucide="shield-alert" class="w-4 h-4 shrink-0 mt-0.5 text-amber-600"></i>
+            <svg class="w-4 h-4 shrink-0 mt-0.5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
             <span><strong>Director Approval Policy:</strong> Every enrolled income entry requires explicit authorization
               by <strong>Pranav Bansode (Founder / Director)</strong> before funds are credited to Available Company
               Cash.</span>
@@ -1279,6 +1331,7 @@
                 class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-[#026047]">
                 <option value="mem-02">Arshad Shaikh (Co-Founder / Marketing)</option>
                 <option value="mem-03">Vivek Gajdhane (Technical Dept)</option>
+                <option value="mem-04">Aryan Bhore (Research Lead)</option>
               </select>
             </div>
             <div>
@@ -1339,7 +1392,7 @@
         <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
           <div class="flex items-center gap-2">
             <span class="p-2 rounded-lg bg-[#026047]/10 text-[#026047] dark:bg-emerald-950 dark:text-emerald-300">
-              <i data-lucide="file-check" class="w-5 h-5"></i>
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
             </span>
             <div>
               <h3 class="font-bold text-sm text-slate-900 dark:text-white">Official Payment Invoice & Receipt</h3>
@@ -1369,11 +1422,11 @@
             </button>
             <button onclick="printCurrentInvoice()"
               class="px-3.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold inline-flex items-center gap-1.5">
-              <i data-lucide="printer" class="w-3.5 h-3.5"></i> Print / Save PDF
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg> Print / Save PDF
             </button>
             <button onclick="downloadCurrentInvoice()"
               class="px-4 py-1.5 rounded-lg bg-[#026047] text-[#fffde8] font-bold text-xs hover:bg-[#024d39] shadow-sm inline-flex items-center gap-1.5">
-              <i data-lucide="download" class="w-3.5 h-3.5"></i> Download Invoice
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg> Download Invoice
             </button>
           </div>
         </div>
@@ -1657,6 +1710,77 @@
               class="px-4 py-2 rounded-lg bg-[#026047] text-[#fffde8] font-black text-xs hover:bg-[#024d39] transition shadow-md flex items-center gap-1.5">
               <span>🏆</span> Finalize & Approve for Delivery
             </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL: RECORD FOUNDER DRAWING              -->
+    <!-- ========================================== -->
+    <div id="modal-new-drawing"
+      class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+      <div
+        class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-5 shadow-2xl space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+          <h3 class="font-bold text-sm text-slate-900 dark:text-white">Record Executive Drawing</h3>
+          <button onclick="closeNewDrawingModal()"
+            class="text-slate-400 hover:text-slate-700 dark:hover:text-white text-lg font-bold">&times;</button>
+        </div>
+        <form onsubmit="event.preventDefault(); submitNewDrawing();" class="space-y-3 text-xs">
+          <div>
+            <label class="block text-slate-600 dark:text-slate-400 mb-1">Purpose / Narration *</label>
+            <input id="draw-purpose" type="text" required placeholder="e.g. Monthly Director Capital Distribution"
+              class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-[#026047]" />
+          </div>
+          <div>
+            <label class="block text-slate-600 dark:text-slate-400 mb-1">Amount (₹) *</label>
+            <input id="draw-amount" type="number" required min="1" placeholder="10000"
+              class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-[#026047]" />
+          </div>
+          <div class="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <button type="button" onclick="closeNewDrawingModal()"
+              class="px-3 py-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 text-xs">Cancel</button>
+            <button type="submit"
+              class="px-4 py-1.5 rounded-lg bg-[#026047] text-[#fffde8] font-bold text-xs hover:bg-[#024d39]">Record Drawing</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL: ALLOCATE TO COMPANY RESERVE         -->
+    <!-- ========================================== -->
+    <div id="modal-allocate-reserve"
+      class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+      <div
+        class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-5 shadow-2xl space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+          <h3 class="font-bold text-sm text-slate-900 dark:text-white">Allocate Funds to Reserve</h3>
+          <button onclick="closeAllocateReserveModal()"
+            class="text-slate-400 hover:text-slate-700 dark:hover:text-white text-lg font-bold">&times;</button>
+        </div>
+        <form onsubmit="event.preventDefault(); submitAllocateReserve();" class="space-y-3 text-xs">
+          <div>
+            <label class="block text-slate-600 dark:text-slate-400 mb-1">Target Reserve Fund *</label>
+            <select id="reserve-select"
+              class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-[#026047]">
+              <option value="res-01">Emergency Reserve</option>
+              <option value="res-02">Operational Reserve</option>
+              <option value="res-03">Product Development Reserve</option>
+              <option value="res-04">Tax &amp; Statutory Reserve</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-slate-600 dark:text-slate-400 mb-1">Allocation Amount (₹) *</label>
+            <input id="reserve-amount" type="number" required min="1" placeholder="15000"
+              class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-[#026047]" />
+          </div>
+          <div class="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <button type="button" onclick="closeAllocateReserveModal()"
+              class="px-3 py-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 text-xs">Cancel</button>
+            <button type="submit"
+              class="px-4 py-1.5 rounded-lg bg-[#026047] text-[#fffde8] font-bold text-xs hover:bg-[#024d39]">Earmark Funds</button>
           </div>
         </form>
       </div>

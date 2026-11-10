@@ -2961,7 +2961,6 @@ function getInitials(name, fallback = 'TM') {
 function renderAssignProjects() {
   const metricsEl = document.getElementById('assign-projects-metrics-container');
   const container = document.getElementById('assign-projects-container');
-  const leadPipeEl = document.getElementById('assign-lead-pipeline');
   if (!container) return;
 
   const memberFilter = document.getElementById('task-member-filter')?.value || 'ALL';
@@ -3100,10 +3099,6 @@ function renderAssignProjects() {
       `;
       })
       .join('');
-  }
-
-  if (leadPipeEl) {
-    leadPipeEl.innerHTML = renderLeadPipelineSection();
   }
 }
 window.renderAssignProjects = renderAssignProjects;
