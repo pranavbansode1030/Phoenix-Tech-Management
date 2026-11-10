@@ -10,11 +10,15 @@
  *   2. Smart Review Management
  */
 
+(function (window, document) {
+  'use strict';
+
 // ==============================================================================
 // SUPABASE CLIENT & LIVE DATABASE SYNC
 // ==============================================================================
 const PHOENIX_SUPABASE_URL = 'https://mvdknbfisgrwewljqnxw.supabase.co';
 const PHOENIX_SUPABASE_ANON = 'sb_publishable_W_QNdDR7wpYjgmZJQ_Bjsw_iS3TxZPA';
+const APP_STATE_STORAGE_KEY = 'phoenix_erp_state_v1';
 
 function getSupabaseClient() {
   if (window.PhoenixSupabase && typeof window.PhoenixSupabase.getClient === 'function') {
@@ -40,6 +44,13 @@ const UUID_MEMBER_MAP = {
   '00000000-0000-4000-8000-000000000004': 'mem-04'
 };
 
+const MEMBER_NAME_MAP = {
+  'mem-01': 'Pranav Bansode',
+  'mem-02': 'Arshad Shaikh',
+  'mem-03': 'Vivek Gajdhane',
+  'mem-04': 'Aryan Bhore'
+};
+
 const PROJECT_UUID_MAP = {
   'prj-leadx': '00000000-0000-4000-a000-000000000001',
   'prj-srm': '00000000-0000-4000-a000-000000000002'
@@ -59,6 +70,154 @@ function escapeHtml(str) {
     .replace(/'/g, '&#039;');
 }
 window.escapeHtml = escapeHtml;
+
+function safeId(id) {
+  return String(id || '').replace(/[^a-zA-Z0-9_-]/g, '');
+}
+
+function sanitizeUrl(url) {
+  const raw = String(url || '').trim();
+  if (!raw) return '';
+  try {
+    const parsed = new URL(raw, window.location.origin);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      return parsed.href;
+    }
+  } catch (e) {
+    // Reject malformed URLs
+  }
+  return '';
+}
+
+function csvSafe(val) {
+  let str = String(val === null || val === undefined ? '' : val);
+  if (/^[=+\-@\t\r]/.test(str)) {
+    str = "'" + str;
+  }
+  return `"${str.replace(/"/g, '""')}"`;
+}
+
+function requireAuth(actionDesc = 'perform this action') {
+  if (!STATE.isAuthenticated || !STATE.activeRole) {
+    showToast(`Authentication required to ${actionDesc}.`);
+    return false;
+  }
+  return true;
+}
+
+function requireFounder(actionDesc = 'perform this executive action') {
+  if (!requireAuth(actionDesc)) return false;
+  if (STATE.activeRole !== 'pranav') {
+    showToast(`Security Gate: Only Founder & Director Pranav Bansode can ${actionDesc}.`);
+    return false;
+  }
+  return true;
+}
+
+function getCurrentMemberId() {
+  if (STATE.activeRole === 'pranav') return 'mem-01';
+  if (STATE.activeRole === 'arshad') return 'mem-02';
+  if (STATE.activeRole === 'vivek') return 'mem-03';
+  if (STATE.activeRole === 'aryan') return 'mem-04';
+  return null;
+}
+
+function matchesDateFilter(dateStr) {
+  const filter = STATE.dateFilter || 'current_month';
+  if (filter === 'all_time' || !dateStr) return true;
+  const isoDay = String(dateStr).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(isoDay)) return true;
+
+  if (filter === 'current_month') {
+    return isoDay.startsWith('2026-11');
+  }
+  if (filter === 'previous_month') {
+    return isoDay.startsWith('2026-10');
+  }
+  if (filter === 'last_3_months') {
+    return isoDay >= '2026-09-01' && isoDay <= '2026-11-30';
+  }
+  if (filter === 'current_fy') {
+    return isoDay >= '2026-04-01' && isoDay <= '2027-03-31';
+  }
+  return true;
+}
+
+function normalizeLead(lead) {
+  if (!lead || typeof lead !== 'object') return lead;
+  const canonicalStatus = lead.status || lead.stage || 'submitted_to_founder';
+  return {
+    ...lead,
+    status: canonicalStatus,
+    stage: canonicalStatus,
+    founderInstructions: lead.founderInstructions || lead.founderNotes || '',
+    deliverableUrl: lead.deliverableUrl || lead.techDeliverableUrl || '',
+    approvedAt: lead.approvedAt || lead.finalDeliveryApprovedAt || null
+  };
+}
+
+function saveAppStateToStorage() {
+  try {
+    const payload = {
+      projects: STATE.projects,
+      income: STATE.income,
+      expenses: STATE.expenses,
+      reserves: STATE.reserves,
+      drawings: STATE.drawings,
+      payouts: STATE.payouts,
+      auditLogs: STATE.auditLogs,
+      teamFinancials: (STATE.team || []).map((m) => ({
+        id: m.id,
+        pendingCompensation: m.pendingCompensation || 0,
+        paymentsMade: m.paymentsMade || 0,
+        drawingsYTD: m.drawingsYTD || 0
+      }))
+    };
+    localStorage.setItem(APP_STATE_STORAGE_KEY, JSON.stringify(payload));
+  } catch (e) {
+    console.warn('App state save error:', e);
+  }
+}
+
+function loadAppStateFromStorage() {
+  try {
+    const raw = localStorage.getItem(APP_STATE_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return;
+    if (Array.isArray(parsed.projects) && parsed.projects.length > 0) STATE.projects = parsed.projects;
+    if (Array.isArray(parsed.income)) STATE.income = parsed.income;
+    if (Array.isArray(parsed.expenses)) STATE.expenses = parsed.expenses;
+    if (Array.isArray(parsed.reserves) && parsed.reserves.length > 0) STATE.reserves = parsed.reserves;
+    if (Array.isArray(parsed.drawings)) STATE.drawings = parsed.drawings;
+    if (Array.isArray(parsed.payouts)) STATE.payouts = parsed.payouts;
+    if (Array.isArray(parsed.auditLogs) && parsed.auditLogs.length > 0) STATE.auditLogs = parsed.auditLogs;
+    if (Array.isArray(parsed.teamFinancials)) {
+      parsed.teamFinancials.forEach((tf) => {
+        const mem = STATE.team.find((m) => m.id === tf.id);
+        if (mem) {
+          mem.pendingCompensation = Number(tf.pendingCompensation) || 0;
+          mem.paymentsMade = Number(tf.paymentsMade) || 0;
+          mem.drawingsYTD = Number(tf.drawingsYTD) || 0;
+        }
+      });
+    }
+  } catch (e) {
+    console.warn('App state load error:', e);
+  }
+}
+
+function recordAuditLog(action, details, performedBy) {
+  STATE.auditLogs.unshift({
+    id: 'log-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+    action,
+    details,
+    performedBy,
+    date: new Date().toISOString().replace('T', ' ').slice(0, 16)
+  });
+  if (STATE.auditLogs.length > 200) STATE.auditLogs.length = 200;
+  saveAppStateToStorage();
+}
 
 function saveAssignedTasksToStorage() {
   try {
@@ -81,7 +240,9 @@ function loadLeadsFromStorage() {
     const raw = localStorage.getItem('phoenix_leads_pipeline');
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map(normalizeLead);
+      }
     }
   } catch (e) {
     console.warn('Leads storage load error:', e);
@@ -104,6 +265,7 @@ function loadAssignedTasksFromStorage() {
 }
 
 async function syncTasksFromSupabase() {
+  if (!STATE.isAuthenticated) return;
   loadAssignedTasksFromStorage();
   const sb = getSupabaseClient();
   if (!sb) return;
@@ -119,25 +281,31 @@ async function syncTasksFromSupabase() {
     }
 
     if (data && data.length > 0) {
-      STATE.assignedTasks = data.map((row) => ({
-        id: row.id,
-        title: row.title,
-        description: row.description || '',
-        assignedTo: UUID_MEMBER_MAP[row.assigned_to] || 'mem-02',
-        assignedToName: row.assigned_to === '00000000-0000-4000-8000-000000000002' ? 'Arshad Shaikh' : (row.assigned_to === '00000000-0000-4000-8000-000000000003' ? 'Vivek Gajdhane' : 'Team Member'),
-        projectId: UUID_PROJECT_MAP[row.project_id] || 'general',
-        projectName: row.project_id === '00000000-0000-4000-a000-000000000001' ? 'LeadX' : (row.project_id === '00000000-0000-4000-a000-000000000002' ? 'Smart Review Management' : 'General Operations'),
-        priority: row.priority || 'medium',
-        status: row.status || 'assigned',
-        dueDate: row.due_date || '',
-        assignedDate: (row.created_at || '').split('T')[0] || new Date().toISOString().split('T')[0],
-        assignedBy: 'Pranav Bansode (Founder)',
-        completedDate: row.completed_at ? row.completed_at.split('T')[0] : null
-      }));
+      STATE.assignedTasks = data.map((row) => {
+        const mappedMember = UUID_MEMBER_MAP[row.assigned_to] || 'mem-02';
+        const mappedProject = UUID_PROJECT_MAP[row.project_id] || 'general';
+        const prj = STATE.projects.find((p) => p.id === mappedProject);
+        return {
+          id: row.id,
+          title: row.title,
+          description: row.description || '',
+          assignedTo: mappedMember,
+          assignedToName: MEMBER_NAME_MAP[mappedMember] || 'Team Member',
+          projectId: mappedProject,
+          projectName: prj ? prj.name : 'General Operations',
+          priority: row.priority || 'medium',
+          status: row.status || 'assigned',
+          dueDate: row.due_date || '',
+          assignedDate: (row.created_at || '').split('T')[0] || new Date().toISOString().split('T')[0],
+          assignedBy: 'Pranav Bansode (Founder)',
+          completedDate: row.completed_at ? row.completed_at.split('T')[0] : null
+        };
+      });
       saveAssignedTasksToStorage();
 
       if (STATE.currentTab === 'assign-projects') renderAssignProjects();
       if (STATE.currentTab === 'allocated-work') renderAllocatedWork();
+      if (STATE.currentTab === 'approvals') renderApprovals();
       renderSidebarNav(STATE.currentTab);
     }
   } catch (err) {
@@ -158,16 +326,20 @@ function formatINR(val, decimals = true) {
 function formatDate(dateStr) {
   if (!dateStr) return '—';
   const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return escapeHtml(dateStr);
   return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 // Master State
 const STATE = {
-  activeRole: 'pranav', // 'pranav' (Founder/Director) | 'arshad' (Co-Founder) | 'vivek' (Technical Department)
+  isAuthenticated: false,
+  activeRole: null,
   currentTab: 'dashboard-overview',
   selectedEmployeeId: 'mem-01',
   dateFilter: 'current_month',
   theme: localStorage.getItem('phoenix_theme') || 'light',
+  loginAttempts: 0,
+  loginLockoutUntil: 0,
 
   // 1. Team Members (Basic 10k - 15k Range)
   team: [
@@ -261,15 +433,19 @@ const STATE = {
       submittedBy: 'Aryan Bhore',
       submittedByMemberId: 'mem-04',
       submittedAt: '2026-11-09',
-      stage: 'allocated_to_vivek', // 'submitted_to_founder', 'allocated_to_vivek', 'sent_to_arshad_notified_founder', 'approved_for_delivery'
-      founderNotes: 'Vivek, please set up the review interceptor backend, database schema and QR redirect links by Friday.',
+      status: 'allocated_to_vivek',
+      stage: 'allocated_to_vivek',
+      founderInstructions: 'Vivek, please set up the review interceptor backend, database schema and QR redirect links by Friday.',
+      dueDate: '2026-11-16',
+      priority: 'high',
       allocatedTo: 'mem-03',
+      allocatedToName: 'Vivek Gajdhane',
       allocatedAt: '2026-11-09',
       techNotes: '',
-      techDeliverableUrl: '',
+      deliverableUrl: '',
       techCompletedAt: null,
-      arshadNotes: '',
-      finalDeliveryApprovedAt: null
+      arshadChecked: false,
+      approvedAt: null
     },
     {
       id: 'lead-02',
@@ -285,15 +461,18 @@ const STATE = {
       submittedBy: 'Aryan Bhore',
       submittedByMemberId: 'mem-04',
       submittedAt: '2026-11-09',
+      status: 'submitted_to_founder',
       stage: 'submitted_to_founder',
-      founderNotes: '',
+      founderInstructions: '',
+      dueDate: '',
+      priority: 'high',
       allocatedTo: null,
       allocatedAt: null,
       techNotes: '',
-      techDeliverableUrl: '',
+      deliverableUrl: '',
       techCompletedAt: null,
-      arshadNotes: '',
-      finalDeliveryApprovedAt: null
+      arshadChecked: false,
+      approvedAt: null
     }
   ],
 
@@ -409,42 +588,53 @@ const STATE = {
 
 // Calculations Engine
 function calculateMetrics() {
-  // Received Money (Directly from Income Tab - only actual received cash)
-  const receivedRecords = STATE.income.filter((i) => i.status === 'received');
-  const totalMoneyReceived = receivedRecords.reduce((sum, i) => sum + i.amount, 0);
+  // Received Money (Directly from Income Tab - only actual received cash in active date range)
+  const receivedRecords = STATE.income.filter(
+    (i) => i.status === 'received' && matchesDateFilter(i.paymentDate)
+  );
+  const totalMoneyReceived = receivedRecords.reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
 
   // Pending client payments (awaiting clearance or Founder approval)
   const pendingRecords = STATE.income.filter(
-    (i) => i.status === 'pending' || i.status === 'pending_approval'
+    (i) => (i.status === 'pending' || i.status === 'pending_approval') && matchesDateFilter(i.paymentDate)
   );
-  const pendingClientPayments = pendingRecords.reduce((sum, i) => sum + i.amount, 0);
+  const pendingClientPayments = pendingRecords.reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
 
-  // Approved Expenses (Pure amount without GST)
-  const approvedExpenses = STATE.expenses.filter((e) => e.status === 'approved');
-  const totalBusinessExpenses = approvedExpenses.reduce((sum, e) => sum + e.amount, 0);
+  // Approved Expenses
+  const approvedExpenses = STATE.expenses.filter(
+    (e) => e.status === 'approved' && matchesDateFilter(e.date)
+  );
+  const totalBusinessExpenses = approvedExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 
-  // Salaries paid
-  const teamSalariesPaid = STATE.team.reduce((sum, m) => sum + (m.paymentsMade || 0), 0);
+  // Salaries paid (filtered by date)
+  const teamSalariesPaid = (STATE.payouts || [])
+    .filter((p) => p.status === 'paid' && matchesDateFilter(p.paidDate))
+    .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
-  // Founder Drawings
-  const founderDrawingsTotal = STATE.drawings.reduce((sum, d) => sum + d.amount, 0);
+  // Founder Drawings (filtered by date)
+  const founderDrawingsTotal = (STATE.drawings || [])
+    .filter((d) => matchesDateFilter(d.date))
+    .reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
 
   // Reserves Earmarked
-  const totalCompanyReserves = STATE.reserves.reduce((sum, r) => sum + r.currentBalance, 0);
+  const totalCompanyReserves = (STATE.reserves || []).reduce(
+    (sum, r) => sum + (Number(r.currentBalance) || 0),
+    0
+  );
 
-  // Net Business Profit
-  const netBusinessProfit = totalMoneyReceived - totalBusinessExpenses;
+  // Net Business Profit (Revenue - Approved Operating Expenses - Salaries Paid)
+  const netBusinessProfit = totalMoneyReceived - totalBusinessExpenses - teamSalariesPaid;
 
-  // Available Company Cash (Directly connected to Income Tab received inflows)
-  // Available Cash = Total Income Received - Approved Expenses - Founder Drawings
-  const rawCashInBank = totalMoneyReceived;
-  const totalOutflows = totalBusinessExpenses + founderDrawingsTotal;
-  const availableCompanyCash = Math.max(0, rawCashInBank - totalOutflows);
+  // Unencumbered Available Company Cash
+  const totalOutflows = totalBusinessExpenses + teamSalariesPaid + founderDrawingsTotal + totalCompanyReserves;
+  const availableCompanyCash = Math.max(0, totalMoneyReceived - totalOutflows);
 
   return {
     totalMoneyReceived,
     pendingClientPayments,
     totalBusinessExpenses,
+    teamSalariesPaid,
+    founderDrawingsTotal,
     totalCompanyReserves,
     availableCompanyCash,
     netBusinessProfit,
@@ -454,49 +644,78 @@ function calculateMetrics() {
 // Interconnected Project Calculation Helper
 function getProjectFinancials(projectId) {
   const received = STATE.income
-    .filter((i) => i.projectId === projectId && i.status === 'received')
-    .reduce((sum, i) => sum + i.amount, 0);
+    .filter((i) => i.projectId === projectId && i.status === 'received' && matchesDateFilter(i.paymentDate))
+    .reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
 
   const pending = STATE.income
-    .filter((i) => i.projectId === projectId && (i.status === 'pending' || i.status === 'pending_approval'))
-    .reduce((sum, i) => sum + i.amount, 0);
+    .filter(
+      (i) =>
+        i.projectId === projectId &&
+        (i.status === 'pending' || i.status === 'pending_approval') &&
+        matchesDateFilter(i.paymentDate)
+    )
+    .reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
 
   const expenses = STATE.expenses
-    .filter((e) => e.projectId === projectId && e.status === 'approved')
-    .reduce((sum, e) => sum + e.amount, 0);
+    .filter((e) => e.projectId === projectId && e.status === 'approved' && matchesDateFilter(e.date))
+    .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 
   const net = received - expenses;
 
   return { received, pending, expenses, net };
 }
 
-// Dynamic Project Dropdowns Sync (Interconnects Projects -> Income & Expense forms)
+// Dynamic Project Dropdowns Sync (Interconnects Projects -> Income, Expense & Task forms)
 function updateProjectSelectOptions() {
   const incSel = document.getElementById('inc-project');
   const expSel = document.getElementById('exp-project');
+  const expFilterSel = document.getElementById('expense-project-filter');
+  const taskProjSel = document.getElementById('task-project');
 
   if (incSel) {
     incSel.innerHTML = STATE.projects
-      .map((p) => `<option value="${p.id}">${p.name} (${p.code})</option>`)
+      .map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)} (${escapeHtml(p.code)})</option>`)
       .join('');
   }
 
   if (expSel) {
     expSel.innerHTML = `
-      ${STATE.projects.map((p) => `<option value="${p.id}">${p.name} (${p.code})</option>`).join('')}
+      ${STATE.projects.map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)} (${escapeHtml(p.code)})</option>`).join('')}
       <option value="">General Company (Overhead)</option>
     `;
+  }
+
+  if (expFilterSel) {
+    const prev = expFilterSel.value || 'ALL';
+    expFilterSel.innerHTML = `
+      <option value="ALL">All Projects</option>
+      ${STATE.projects.map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join('')}
+      <option value="GENERAL">General Operations</option>
+    `;
+    if ([...expFilterSel.options].some((o) => o.value === prev)) {
+      expFilterSel.value = prev;
+    }
+  }
+
+  if (taskProjSel) {
+    const prev = taskProjSel.value || 'prj-leadx';
+    taskProjSel.innerHTML = `
+      ${STATE.projects.map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join('')}
+      <option value="general">General Operations</option>
+    `;
+    if ([...taskProjSel.options].some((o) => o.value === prev)) {
+      taskProjSel.value = prev;
+    }
   }
 }
 
 // UI Initialization & Authentication Gate
 document.addEventListener('DOMContentLoaded', () => {
+  loadAppStateFromStorage();
+  loadAssignedTasksFromStorage();
   setupTheme();
-  setupNavigation();
-  setupRoleSwitcher();
   setupDateFilter();
   updateProjectSelectOptions();
-  syncTasksFromSupabase();
 
   // Ensure Login Portal screen is presented first on page load
   const urlParams = new URLSearchParams(window.location.search);
@@ -508,8 +727,10 @@ document.addEventListener('DOMContentLoaded', () => {
     (sessionUser === 'pranav' || sessionUser === 'arshad' || sessionUser === 'vivek' || sessionUser === 'aryan')
   ) {
     loginAsUser(sessionUser, false);
+    syncTasksFromSupabase();
   } else {
-    // Show login page by default so user can sign in with any account
+    STATE.isAuthenticated = false;
+    STATE.activeRole = null;
     const portal = document.getElementById('login-portal-screen');
     const app = document.getElementById('app-workspace');
     if (portal) portal.classList.remove('hidden');
@@ -771,7 +992,7 @@ function renderSidebarNav(activeTab) {
 
       <!-- Section: Engineering & Systems -->
       <div class="px-3 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-[#fffde8]/60 flex items-center gap-1.5 border-t border-[#024d39]/80 mt-1">
-        <span>🛠 ï¸</span> Tech & Infrastructure
+        <span>🛠️</span> Tech & Infrastructure
       </div>
 
       <button data-nav="projects" class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl ${activeTab === 'projects' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
@@ -802,6 +1023,8 @@ function renderSidebarNav(activeTab) {
 }
 
 function switchTab(tabId, subView = null) {
+  if (!requireAuth('switch views')) return;
+
   if (tabId === 'project-finance') {
     STATE.projectSubView = 'finance';
     tabId = 'projects';
@@ -812,17 +1035,17 @@ function switchTab(tabId, subView = null) {
 
   // Security Gate: Non-founders cannot access executive financial tabs
   if (
-    STATE.activeRole &&
     STATE.activeRole !== 'pranav' &&
     (normalized === 'dashboard-overview' ||
       normalized === 'founder-dashboard' ||
       normalized === 'approvals' ||
       normalized === 'assign-projects' ||
+      normalized === 'sales-done' ||
       normalized === 'project-finance' ||
       normalized === 'financial-summary')
   ) {
     showToast('Confidential Section: Executive controls are reserved for Founder & Director Pranav Bansode.');
-    normalized = 'allocated-work';
+    normalized = 'employee-dashboard';
   }
 
   // Founder shouldn't land on employee-specific allocated work view
@@ -842,41 +1065,10 @@ function switchTab(tabId, subView = null) {
 
   renderCurrentTab();
 }
-
-window.toggleRoleMenu = function (e) {
-  if (e) e.stopPropagation();
-  const dropdown = document.getElementById('role-menu-dropdown');
-  if (dropdown) dropdown.classList.toggle('hidden');
-};
-
-window.selectActiveRole = function (role) {
-  STATE.activeRole = role;
-  const dropdown = document.getElementById('role-menu-dropdown');
-  if (dropdown) dropdown.classList.add('hidden');
-  updateRoleDisplay();
-  renderCurrentTab();
-  showToast(
-    role === 'pranav'
-      ? 'Executive Mode: Pranav Bansode (Founder & Director) • Full Authority'
-      : `Switched View: ${role === 'arshad' ? 'Arshad Shaikh (Co-Founder)' : (role === 'aryan' ? 'Aryan Bhore (Research Lead)' : 'Vivek Gajdhane (Technical Dept)')}`
-  );
-};
-
-function setupRoleSwitcher() {
-  document.addEventListener('click', (e) => {
-    const dropdown = document.getElementById('role-menu-dropdown');
-    const btn = document.getElementById('role-menu-button');
-    if (dropdown && !dropdown.classList.contains('hidden')) {
-      if (!dropdown.contains(e.target) && (!btn || !btn.contains(e.target))) {
-        dropdown.classList.add('hidden');
-      }
-    }
-  });
-
-  updateRoleDisplay();
-}
+window.switchTab = switchTab;
 
 function updateRoleDisplay() {
+  if (!STATE.activeRole) return;
   const nameEl = document.getElementById('founder-name');
   const avatarText = document.getElementById('founder-avatar-text');
   const crownBadge = document.getElementById('founder-crown-badge');
@@ -926,6 +1118,7 @@ function updateRoleDisplay() {
     if (btnIncome) {
       btnIncome.classList.remove('hidden');
       btnIncome.textContent = '+ Income';
+      btnIncome.onclick = window.openNewIncomeModal;
     }
     if (btnExpense) btnExpense.classList.remove('hidden');
 
@@ -933,7 +1126,7 @@ function updateRoleDisplay() {
     if (nameEl) nameEl.textContent = 'Arshad Shaikh';
     if (avatarText) avatarText.textContent = 'AS';
     if (crownBadge) {
-      crownBadge.textContent = '🤝';
+      crownBadge.textContent = '🤝';
       crownBadge.className = 'absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-blue-100 text-blue-800 flex items-center justify-center text-[10px] font-bold shadow ring-1 ring-blue-300';
     }
     if (desigBadge) {
@@ -951,18 +1144,19 @@ function updateRoleDisplay() {
         </p>
       `;
     }
-    if (currentRoleLabel) currentRoleLabel.innerHTML = '🤝 Co-Founder';
+    if (currentRoleLabel) currentRoleLabel.innerHTML = '🤝 Co-Founder';
     if (topbarPill) {
       topbarPill.innerHTML = `
         <span class="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
         <span class="font-extrabold text-blue-700 dark:text-blue-300">Arshad Shaikh</span>
-        <span class="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300">🤝 Co-Founder</span>
+        <span class="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300">🤝 Co-Founder</span>
       `;
     }
     if (btnCsv) btnCsv.classList.add('hidden');
     if (btnIncome) {
       btnIncome.classList.remove('hidden');
       btnIncome.textContent = '+ Enroll Deal';
+      btnIncome.onclick = window.openNewIncomeModal;
     }
     if (btnExpense) btnExpense.classList.remove('hidden');
 
@@ -1046,6 +1240,7 @@ function setupDateFilter() {
   const filter = document.getElementById('date-filter');
   if (filter) {
     filter.addEventListener('change', (e) => {
+      if (!STATE.isAuthenticated) return;
       STATE.dateFilter = e.target.value;
       renderCurrentTab();
       showToast(`Filter applied: ${e.target.options[e.target.selectedIndex].text}`);
@@ -1131,6 +1326,7 @@ window.renderDashboardOverview = renderDashboardOverview;
 // Overall company finances, income, expenses, available cash and approvals
 // ==============================================================================
 function renderFounderDashboard() {
+  if (!STATE.isAuthenticated || STATE.activeRole !== 'pranav') return;
   const m = calculateMetrics();
 
   // 4 Core Financial Metrics (Connected to Inflows & Outflows)
@@ -1157,16 +1353,16 @@ function renderFounderDashboard() {
         </div>
       </div>
 
-      <!-- Available Company Cash (Connected & Lighthearted) -->
+      <!-- Available Company Cash (Unencumbered) -->
       <div class="p-5 rounded-xl bg-[#026047] text-[#fffde8] shadow-sm">
         <div class="flex items-center justify-between">
           <span class="text-xs opacity-90 font-medium">Available Company Cash</span>
-          <span class="px-2 py-0.5 text-[10px] rounded bg-white/20 text-[#fffde8] font-bold">Lighthearted</span>
+          <span class="px-2 py-0.5 text-[10px] rounded bg-white/20 text-[#fffde8] font-bold">Unencumbered</span>
         </div>
         <div class="text-2xl font-black text-[#fffde8] mt-2 min-h-[32px] flex items-center">${formatINR(m.availableCompanyCash)}</div>
         <div class="flex items-center justify-between text-[11px] opacity-80 mt-2">
           <span>Net Solvency Balance</span>
-          <span>Solvent</span>
+          <span>${m.availableCompanyCash >= 0 ? 'Solvent' : 'Deficit'}</span>
         </div>
       </div>
 
@@ -1208,110 +1404,123 @@ function renderFounderDashboard() {
         </div>
       `;
     } else {
-      const incomeCards = pendingIncome.map((inc) => `
+      const incomeCards = pendingIncome.map((inc) => {
+        const sid = safeId(inc.id);
+        return `
         <div class="p-4 rounded-xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-900/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div class="flex items-start gap-3">
             <span class="p-2 rounded-lg bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-300 font-bold text-xs shrink-0 mt-0.5">INFLOW</span>
             <div>
               <div class="flex items-center gap-2">
-                <span class="font-bold text-sm text-slate-900 dark:text-white">${inc.clientName}</span>
-                <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">${inc.projectName}</span>
+                <span class="font-bold text-sm text-slate-900 dark:text-white">${escapeHtml(inc.clientName)}</span>
+                <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">${escapeHtml(inc.projectName)}</span>
               </div>
-              <p class="text-xs text-slate-600 dark:text-slate-400 mt-0.5">${inc.notes || 'Client invoice milestone enrolled for clearance.'}</p>
-              <div class="text-[10px] text-slate-500 mt-1">Submitted by: <strong>${inc.createdBy || 'Team'}</strong> • Method: <span class="uppercase">${inc.paymentMethod}</span></div>
+              <p class="text-xs text-slate-600 dark:text-slate-400 mt-0.5">${escapeHtml(inc.notes || 'Client invoice milestone enrolled for clearance.')}</p>
+              <div class="text-[10px] text-slate-500 mt-1">Submitted by: <strong>${escapeHtml(inc.createdBy || 'Team')}</strong> • Method: <span class="uppercase">${escapeHtml(inc.paymentMethod)}</span></div>
             </div>
           </div>
-          <div class="flex items-center justify-between sm:justify-end gap-3 self-end sm:self-auto w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-t-0 border-amber-200/60">
-            <div class="text-right">
+          <div class="flex items-center justify-between sm:justify-end gap-2 self-end sm:self-auto w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-t-0 border-amber-200/60">
+            <div class="text-right mr-1">
               <span class="text-[10px] text-slate-400 block uppercase font-medium">Pending Inflow</span>
               <span class="text-base font-black text-[#026047] dark:text-emerald-400">${formatINR(inc.amount)}</span>
             </div>
-            ${STATE.activeRole === 'pranav'
-              ? `<button onclick="approveIncome('${inc.id}')" class="px-3.5 py-2 rounded-lg bg-[#026047] text-[#fffde8] font-bold text-xs hover:bg-[#024d39] shadow transition flex items-center gap-1.5 shrink-0">
-                  <span>👑</span> Approve Inflow & Invoice
-                 </button>`
-              : `<span class="px-3 py-1.5 rounded-lg bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 text-xs font-semibold shrink-0">
-                  Awaiting Founder Signatory
-                 </span>`
-            }
+            <button onclick="approveIncome('${sid}')" class="px-3.5 py-2 rounded-lg bg-[#026047] text-[#fffde8] font-bold text-xs hover:bg-[#024d39] shadow transition flex items-center gap-1.5 shrink-0">
+              <span>👑</span> Approve Inflow &amp; Invoice
+            </button>
+            <button onclick="rejectIncome('${sid}')" class="px-2.5 py-2 rounded-lg border border-rose-300 text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950 font-bold text-xs transition shrink-0">
+              Reject
+            </button>
           </div>
         </div>
-      `).join('');
+      `;
+      }).join('');
 
-      const expenseCards = pendingExpenses.map((exp) => `
+      const expenseCards = pendingExpenses.map((exp) => {
+        const sid = safeId(exp.id);
+        return `
         <div class="p-4 rounded-xl bg-rose-50/60 dark:bg-rose-950/20 border border-rose-200/80 dark:border-rose-900/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div class="flex items-start gap-3">
             <span class="p-2 rounded-lg bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-300 font-bold text-xs shrink-0 mt-0.5">OUTFLOW</span>
             <div>
               <div class="flex items-center gap-2">
-                <span class="font-bold text-sm text-slate-900 dark:text-white">${exp.title}</span>
-                <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">${exp.projectName || 'General'}</span>
+                <span class="font-bold text-sm text-slate-900 dark:text-white">${escapeHtml(exp.title)}</span>
+                <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">${escapeHtml(exp.projectName || 'General')}</span>
               </div>
-              <p class="text-xs text-slate-600 dark:text-slate-400 mt-0.5">${exp.description || 'Expense recorded awaiting approval.'}</p>
-              <div class="text-[10px] text-slate-500 mt-1">Paid by: <strong>${exp.paidBy}</strong> • Category: ${formatExpenseCategory(exp.category)}</div>
+              <p class="text-xs text-slate-600 dark:text-slate-400 mt-0.5">${escapeHtml(exp.description || 'Expense recorded awaiting approval.')}</p>
+              <div class="text-[10px] text-slate-500 mt-1">Paid by: <strong>${escapeHtml(exp.paidBy)}</strong> • Category: ${escapeHtml(formatExpenseCategory(exp.category))}</div>
             </div>
           </div>
-          <div class="flex items-center justify-between sm:justify-end gap-3 self-end sm:self-auto w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-t-0 border-rose-200/60">
-            <div class="text-right">
+          <div class="flex items-center justify-between sm:justify-end gap-2 self-end sm:self-auto w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-t-0 border-rose-200/60">
+            <div class="text-right mr-1">
               <span class="text-[10px] text-slate-400 block uppercase font-medium">Pending Cost</span>
               <span class="text-base font-black text-rose-600 dark:text-rose-400">${formatINR(exp.amount)}</span>
             </div>
-            ${STATE.activeRole === 'pranav'
-              ? `<button onclick="approveExpense('${exp.id}')" class="px-3.5 py-2 rounded-lg bg-[#026047] text-[#fffde8] font-bold text-xs hover:bg-[#024d39] shadow transition flex items-center gap-1.5 shrink-0">
-                  <span>👑</span> Approve Outflow
-                 </button>`
-              : `<span class="px-3 py-1.5 rounded-lg bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300 text-xs font-semibold shrink-0">
-                  Awaiting Founder Signatory
-                 </span>`
-            }
+            <button onclick="approveExpense('${sid}')" class="px-3.5 py-2 rounded-lg bg-[#026047] text-[#fffde8] font-bold text-xs hover:bg-[#024d39] shadow transition flex items-center gap-1.5 shrink-0">
+              <span>👑</span> Approve Outflow
+            </button>
+            <button onclick="rejectExpense('${sid}')" class="px-2.5 py-2 rounded-lg border border-rose-300 text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950 font-bold text-xs transition shrink-0">
+              Reject
+            </button>
           </div>
         </div>
-      `).join('');
+      `;
+      }).join('');
 
       queueEl.innerHTML = `<div class="space-y-3">${incomeCards}${expenseCards}</div>`;
     }
   }
 
-  // Company Verified Inflow Table
+  // Company Verified Inflow Table (Respecting active date filter)
   const incomeTable = document.getElementById('income-table-body');
   if (incomeTable) {
-    incomeTable.innerHTML = STATE.income.map((inc) => {
+    const filteredIncome = STATE.income.filter((inc) => matchesDateFilter(inc.paymentDate));
+    if (filteredIncome.length === 0) {
+      incomeTable.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-slate-400 italic">No client inflows recorded for the selected period. Click "+ Enroll Income" to record revenue.</td></tr>`;
+      return;
+    }
+
+    incomeTable.innerHTML = filteredIncome.map((inc) => {
+      const sid = safeId(inc.id);
       const isReceived = inc.status === 'received';
+      const isRejected = inc.status === 'rejected';
       const isPending = inc.status === 'pending_approval' || inc.status === 'pending';
       const badge = isReceived
-        ? '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">✓ Settled & Verified</span>'
+        ? '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">✓ Settled &amp; Verified</span>'
+        : isRejected
+        ? '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300">✕ Rejected</span>'
         : '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">⏳ Pending Approval</span>';
 
       return `
         <tr class="border-b border-slate-100 dark:border-slate-800 text-xs hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
           <td class="py-3 px-3 font-mono text-slate-500">${formatDate(inc.paymentDate)}</td>
           <td class="py-3 px-3">
-            <div class="font-bold text-slate-900 dark:text-white">${inc.clientName}</div>
-            <div class="text-[11px] text-slate-500">${inc.source || 'Client Inflow'}</div>
-            ${inc.createdBy ? `<div class="text-[10px] text-slate-400">Enrolled by: ${inc.createdBy}</div>` : ''}
+            <div class="font-bold text-slate-900 dark:text-white">${escapeHtml(inc.clientName)}</div>
+            <div class="text-[11px] text-slate-500">${escapeHtml(inc.source || 'Client Inflow')}</div>
+            ${inc.createdBy ? `<div class="text-[10px] text-slate-400">Enrolled by: ${escapeHtml(inc.createdBy)}</div>` : ''}
           </td>
           <td class="py-3 px-3">
-            <span class="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">${inc.projectName}</span>
+            <span class="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">${escapeHtml(inc.projectName)}</span>
           </td>
           <td class="py-3 px-3 text-right font-black text-[#026047] dark:text-emerald-400 text-sm">${formatINR(inc.amount)}</td>
-          <td class="py-3 px-3 text-center uppercase text-[10px] font-mono text-slate-600 dark:text-slate-400">${inc.paymentMethod}</td>
+          <td class="py-3 px-3 text-center uppercase text-[10px] font-mono text-slate-600 dark:text-slate-400">${escapeHtml(inc.paymentMethod)}</td>
           <td class="py-3 px-3 text-center">${badge}</td>
           <td class="py-3 px-3 text-right">
             ${
               isPending
-                ? STATE.activeRole === 'pranav'
-                  ? `<button onclick="approveIncome('${inc.id}')" class="px-2.5 py-1 rounded-md bg-[#026047] text-[#fffde8] font-bold text-xs hover:bg-[#024d39] shadow-sm transition">
-                      Approve
-                     </button>`
-                  : `<span class="text-amber-700 dark:text-amber-400 text-[10px] font-semibold">Requires Founder</span>`
-                : `<div class="flex items-center justify-end gap-1.5">
-                     <button onclick="openInvoiceModal('${inc.id}')" class="px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-[10px] transition">
+                ? `<div class="flex items-center justify-end gap-1">
+                     <button onclick="approveIncome('${sid}')" class="px-2.5 py-1 rounded-md bg-[#026047] text-[#fffde8] font-bold text-xs hover:bg-[#024d39] shadow-sm transition">Approve</button>
+                     <button onclick="rejectIncome('${sid}')" class="px-2 py-1 rounded-md border border-rose-300 text-rose-600 hover:bg-rose-50 font-bold text-[10px] transition">Reject</button>
+                   </div>`
+                : isReceived
+                ? `<div class="flex items-center justify-end gap-1.5">
+                     <button onclick="openInvoiceModal('${sid}')" class="px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-[10px] transition">
                        View Invoice
                      </button>
-                     <button onclick="downloadInvoiceDirect('${inc.id}')" class="px-2.5 py-1 rounded-md bg-[#026047] hover:bg-[#024d39] text-[#fffde8] font-bold text-[10px] shadow-sm transition">
+                     <button onclick="downloadInvoiceDirect('${sid}')" class="px-2.5 py-1 rounded-md bg-[#026047] hover:bg-[#024d39] text-[#fffde8] font-bold text-[10px] shadow-sm transition">
                        Download
                      </button>
                    </div>`
+                : '<span class="text-[10px] text-slate-400 italic">Closed</span>'
             }
           </td>
         </tr>
@@ -1322,18 +1531,24 @@ function renderFounderDashboard() {
 
 // Direct Invoice Download Helper
 window.downloadInvoiceDirect = function (id) {
+  if (!requireAuth('download invoices')) return;
   STATE.currentInvoiceId = id;
   downloadCurrentInvoice();
 };
 
 // ==============================================================================
 // 2. AUTHENTICATION & LOGIN GATEWAY
-// Role-based security for Pranav (Founder), Arshad (Co-Founder) & Vivek (Tech)
+// Role-based security for Pranav (Founder), Arshad (Co-Founder), Vivek & Aryan
 // ==============================================================================
 
-window.loginAsUser = function (role, showToastMsg = true) {
+function loginAsUser(role, showToastMsg = true) {
+  if (role !== 'pranav' && role !== 'arshad' && role !== 'vivek' && role !== 'aryan') {
+    return;
+  }
   STATE.isAuthenticated = true;
   STATE.activeRole = role;
+  STATE.loginAttempts = 0;
+  STATE.loginLockoutUntil = 0;
   sessionStorage.setItem('phoenix_session_user', role);
 
   const portal = document.getElementById('login-portal-screen');
@@ -1354,12 +1569,13 @@ window.loginAsUser = function (role, showToastMsg = true) {
   updateRoleDisplay();
   updateLoginPills();
 
-  // If non-founder logs in, route them directly to their confidential Employee Dashboard
   if (role === 'arshad' || role === 'vivek' || role === 'aryan') {
     switchTab('employee-dashboard');
   } else {
     switchTab(STATE.currentTab || 'dashboard-overview');
   }
+
+  syncTasksFromSupabase();
 
   if (showToastMsg) {
     let msg = 'Executive Mode: Pranav Bansode (Founder & Director) • Full Authority';
@@ -1368,10 +1584,10 @@ window.loginAsUser = function (role, showToastMsg = true) {
     else if (role === 'aryan') msg = 'Confidential Session: Aryan Bhore (Research Lead) • Market Research & Scouting Active';
     showToast(msg);
   }
-};
+}
 
 // ==============================================================================
-// UNIQUE CREDENTIALS MAPPING FOR ALL AUTHORIZED MEMBERS (DB & LOCAL SYNC)
+// UNIQUE CREDENTIALS MAPPING FOR ALL AUTHORIZED MEMBERS (OFFLINE FALLBACK)
 // ==============================================================================
 const MEMBER_CREDENTIALS = {
   pranav: {
@@ -1380,11 +1596,8 @@ const MEMBER_CREDENTIALS = {
     designation: 'Founder & Director',
     email: 'pranav@phoenixtech.com',
     memberCode: 'PB-01',
-    validIds: [
-      'pb-01', 'pb01', 'pb-1', 'pb1', 'pranav', 'pranav bansode', 'pranav.bansode',
-      'founder', 'director', 'pranav@phoenixtech.com', 'admin'
-    ],
-    validPasswords: ['1001', 'pranav@1001', 'pb@2026', 'founder1001', '1234', '2026', 'admin']
+    validIds: ['pb-01', 'pb01', 'pranav', 'pranav bansode', 'pranav.bansode', 'pranav@phoenixtech.com'],
+    validPasswords: ['1001', 'pranav@1001', 'pb@2026', 'founder1001']
   },
   arshad: {
     role: 'arshad',
@@ -1392,11 +1605,8 @@ const MEMBER_CREDENTIALS = {
     designation: 'Co-Founder (Marketing & Planning)',
     email: 'arshad@phoenixtech.com',
     memberCode: 'AS-02',
-    validIds: [
-      'as-02', 'as02', 'as-2', 'as2', 'arshad', 'arshad shaikh', 'arshad.shaikh',
-      'co-founder', 'cofounder', 'marketing', 'arshad@phoenixtech.com'
-    ],
-    validPasswords: ['2002', 'arshad@2002', 'as@2026', '1234', '2026']
+    validIds: ['as-02', 'as02', 'arshad', 'arshad shaikh', 'arshad.shaikh', 'arshad@phoenixtech.com'],
+    validPasswords: ['2002', 'arshad@2002', 'as@2026']
   },
   vivek: {
     role: 'vivek',
@@ -1404,11 +1614,8 @@ const MEMBER_CREDENTIALS = {
     designation: 'Technical Department (Architecture)',
     email: 'vivek@phoenixtech.com',
     memberCode: 'VG-03',
-    validIds: [
-      'vg-03', 'vg03', 'vg-3', 'vg3', 'vivek', 'vivek gajdhane', 'vivek.gajdhane',
-      'tech', 'technical', 'developer', 'vivek@phoenixtech.com'
-    ],
-    validPasswords: ['3003', 'vivek@3003', 'vg@2026', '1234', '2026']
+    validIds: ['vg-03', 'vg03', 'vivek', 'vivek gajdhane', 'vivek.gajdhane', 'vivek@phoenixtech.com'],
+    validPasswords: ['3003', 'vivek@3003', 'vg@2026']
   },
   aryan: {
     role: 'aryan',
@@ -1416,169 +1623,159 @@ const MEMBER_CREDENTIALS = {
     designation: 'Research Lead',
     email: 'aryan@phoenixtech.com',
     memberCode: 'AB-04',
-    validIds: [
-      'ab-04', 'ab04', 'ab-4', 'ab4', 'aryan', 'aryan bhore', 'aryan.bhore',
-      'leads', 'lead', 'research', 'research lead', 'aryan@phoenixtech.com'
-    ],
-    validPasswords: ['4004', 'aryan@4004', 'ab@2026', '1234', '2026']
+    validIds: ['ab-04', 'ab04', 'aryan', 'aryan bhore', 'aryan.bhore', 'aryan@phoenixtech.com'],
+    validPasswords: ['4004', 'aryan@4004', 'ab@2026']
   }
 };
+
+function showLoginError(message) {
+  const errBox = document.getElementById('common-login-error');
+  const errText = document.getElementById('common-login-error-text');
+  if (errBox && errText) {
+    errText.textContent = message;
+    errBox.classList.remove('hidden');
+  } else {
+    alert(message);
+  }
+}
+
+function recordFailedLoginAttempt() {
+  STATE.loginAttempts = (STATE.loginAttempts || 0) + 1;
+  if (STATE.loginAttempts >= 5) {
+    STATE.loginLockoutUntil = Date.now() + 30000;
+  }
+}
+
+function resolveRoleFromDbUser(matchedDbUser) {
+  const mIdUpper = (matchedDbUser.member_id || '').toUpperCase();
+  const uRole = (matchedDbUser.role || '').toLowerCase();
+  const uName = (matchedDbUser.name || '').toLowerCase();
+  if (mIdUpper === 'PB-01' || uRole === 'founder_director' || uName === 'pranav bansode') return 'pranav';
+  if (mIdUpper === 'AS-02' || uRole === 'co_founder' || uName === 'arshad shaikh') return 'arshad';
+  if (mIdUpper === 'AB-04' || uRole === 'lead_acquisition' || uName === 'aryan bhore') return 'aryan';
+  if (mIdUpper === 'VG-03' || uRole === 'technical' || uName === 'vivek gajdhane') return 'vivek';
+  return uRole.includes('founder') ? 'pranav' : 'vivek';
+}
 
 window.handleCommonLogin = async function () {
   const idInput = document.getElementById('common-login-id');
   const passInput = document.getElementById('common-login-password');
   const errBox = document.getElementById('common-login-error');
-  const errText = document.getElementById('common-login-error-text');
   const submitBtn = document.getElementById('common-login-btn');
   const submitBtnText = document.getElementById('common-login-btn-text');
+
+  if (errBox) errBox.classList.add('hidden');
+
+  if (STATE.loginLockoutUntil && Date.now() < STATE.loginLockoutUntil) {
+    const secs = Math.ceil((STATE.loginLockoutUntil - Date.now()) / 1000);
+    showLoginError(`Too many failed sign-in attempts. Please wait ${secs}s before retrying.`);
+    return;
+  }
 
   const rawId = idInput ? idInput.value.trim() : '';
   const rawPass = passInput ? passInput.value.trim() : '';
   const lowerId = rawId.toLowerCase();
   const cleanId = lowerId.replace(/[\s\-_]/g, '');
 
-  if (errBox) errBox.classList.add('hidden');
-
   if (!rawId || !rawPass) {
-    if (errBox && errText) {
-      errText.textContent = 'Please enter both your Member ID / Email and Password.';
-      errBox.classList.remove('hidden');
-    } else {
-      alert('Please enter both your Member ID / Email and Password.');
-    }
+    showLoginError('Please enter both your Member ID / Email and Password.');
     return;
   }
 
-  // Set loading state on button
   if (submitBtn) submitBtn.disabled = true;
   if (submitBtnText) submitBtnText.textContent = 'Verifying Credentials...';
 
   try {
-    // =============================================================
-    // 1. SUPABASE DATABASE AUTHENTICATION (public.users table)
-    // Whatever users/passwords the user created or edited in Supabase
-    // =============================================================
+    // 1. SUPABASE DATABASE AUTHENTICATION (Targeted query on public.users)
     const sb = getSupabaseClient();
     if (sb) {
       try {
-        console.log('[Phoenix Auth] Querying Supabase public.users table for:', rawId);
-        const { data: dbUsers, error: dbError } = await sb
+        const escapeLike = (s) => String(s).replace(/[\\%_]/g, '\\$&');
+        let matchedDbUser = null;
+
+        // Normalize common member code format (e.g., pb01 -> PB-01)
+        const normalizedCode = /^([a-z]{2})(\d{2})$/i.test(cleanId)
+          ? cleanId.slice(0, 2).toUpperCase() + '-' + cleanId.slice(2)
+          : rawId.toUpperCase();
+
+        const lookupField = lowerId.includes('@') ? 'email' : 'member_id';
+        const lookupVal = lowerId.includes('@') ? lowerId : normalizedCode;
+
+        let { data: rows, error: dbErr } = await sb
           .from('users')
-          .select('*');
+          .select('id, member_id, name, email, password, role, designation, status')
+          .ilike(lookupField, escapeLike(lookupVal))
+          .limit(1);
 
-        if (!dbError && Array.isArray(dbUsers) && dbUsers.length > 0) {
-          console.log(`[Phoenix Auth] Found ${dbUsers.length} users in database.`);
+        if (!dbErr && (!rows || rows.length === 0) && !lowerId.includes('@')) {
+          const nameRes = await sb
+            .from('users')
+            .select('id, member_id, name, email, password, role, designation, status')
+            .ilike('name', escapeLike(rawId))
+            .limit(1);
+          if (!nameRes.error && nameRes.data && nameRes.data.length > 0) {
+            rows = nameRes.data;
+          }
+        }
 
-          const matchedDbUser = dbUsers.find((u) => {
-            const mId = (u.member_id || '').trim().toLowerCase();
-            const email = (u.email || '').trim().toLowerCase();
-            const name = (u.name || '').trim().toLowerCase();
-            const cleanMId = mId.replace(/[\s\-_]/g, '');
-            const cleanEmailName = email.split('@')[0].replace(/[\s\-_]/g, '');
+        if (!dbErr && Array.isArray(rows) && rows.length > 0) {
+          matchedDbUser = rows[0];
+        }
 
-            return (
-              mId === lowerId ||
-              cleanMId === cleanId ||
-              email === lowerId ||
-              cleanEmailName === cleanId ||
-              name === lowerId ||
-              name.includes(lowerId) ||
-              lowerId.includes(mId)
-            );
-          });
+        if (matchedDbUser) {
+          if (matchedDbUser.status && matchedDbUser.status.toLowerCase() !== 'active') {
+            recordFailedLoginAttempt();
+            showLoginError(`Account for ${matchedDbUser.name} is currently inactive. Contact Founder Pranav Bansode.`);
+            return;
+          }
 
-          if (matchedDbUser) {
-            console.log('[Phoenix Auth] Matched user in Supabase users table:', matchedDbUser.name);
-            const savedPassword = (matchedDbUser.password || '').trim();
-
-            // Check if entered password matches the database password
-            // (or matches universal fallback PINs '1234' / '2026' / '1001' / '2002' / '3003' / '4004')
-            const isPasswordMatch =
-              savedPassword === rawPass ||
-              savedPassword === rawPass.trim() ||
-              rawPass === '1234' ||
-              rawPass === '2026' ||
-              rawPass === 'admin' ||
-              (matchedDbUser.member_id === 'PB-01' && rawPass === '1001') ||
-              (matchedDbUser.member_id === 'AS-02' && rawPass === '2002') ||
-              (matchedDbUser.member_id === 'VG-03' && rawPass === '3003') ||
-              (matchedDbUser.member_id === 'AB-04' && rawPass === '4004');
-
-            if (isPasswordMatch) {
-              console.log('[Phoenix Auth] Password verified via database!');
-
-              let targetRole = 'pranav';
-              const mIdUpper = (matchedDbUser.member_id || '').toUpperCase();
-              const uRole = (matchedDbUser.role || '').toLowerCase();
-              const uName = (matchedDbUser.name || '').toLowerCase();
-
-              if (mIdUpper === 'PB-01' || uRole.includes('founder') || uRole.includes('director') || uName.includes('pranav')) {
-                targetRole = 'pranav';
-              } else if (mIdUpper === 'AS-02' || uRole.includes('co_founder') || uRole.includes('marketing') || uName.includes('arshad')) {
-                targetRole = 'arshad';
-              } else if (mIdUpper === 'AB-04' || uRole.includes('research') || uRole.includes('lead') || uName.includes('aryan')) {
-                targetRole = 'aryan';
-              } else if (mIdUpper === 'VG-03' || uRole.includes('technical') || uRole.includes('dev') || uName.includes('vivek')) {
-                targetRole = 'vivek';
-              } else {
-                // Custom user created in database by user!
-                targetRole = uRole.includes('founder') ? 'pranav' : 'aryan';
-              }
-
-              if (errBox) errBox.classList.add('hidden');
-              loginAsUser(targetRole);
-              showToast(`✅ Welcome, ${matchedDbUser.name}! Signed in via Supabase Database.`);
-              return;
-            } else {
-              if (errBox && errText) {
-                errText.textContent = `Incorrect password for ${matchedDbUser.name}. Please enter your valid database password or default PIN.`;
-                errBox.classList.remove('hidden');
-              } else {
-                alert(`Incorrect password for ${matchedDbUser.name}.`);
-              }
-              return;
-            }
+          const savedPassword = (matchedDbUser.password || '').trim();
+          if (savedPassword && savedPassword === rawPass) {
+            const targetRole = resolveRoleFromDbUser(matchedDbUser);
+            if (errBox) errBox.classList.add('hidden');
+            loginAsUser(targetRole, false);
+            recordAuditLog('USER_LOGIN', `Authenticated via database as ${matchedDbUser.name} (${matchedDbUser.member_id})`, matchedDbUser.name);
+            showToast(`Welcome, ${matchedDbUser.name}! Signed in via Supabase Database.`);
+            return;
+          } else {
+            recordFailedLoginAttempt();
+            showLoginError(`Incorrect password for ${matchedDbUser.name}. Please verify your credentials.`);
+            return;
           }
         }
       } catch (dbErr) {
-        console.warn('[Phoenix Auth] Supabase users table query error:', dbErr.message);
+        console.warn('[Phoenix Auth] Supabase users table lookup skipped:', dbErr.message);
       }
     }
 
-    // =============================================================
     // 2. SUPABASE AUTH SERVICE (auth.users)
-    // =============================================================
     try {
       const sbClient = getSupabaseClient();
-      if (sbClient && sbClient.auth) {
-        const authEmail = lowerId.includes('@') ? lowerId : `${lowerId}@phoenixtech.com`;
+      if (sbClient && sbClient.auth && lowerId.includes('@')) {
         const { data: authData, error: authError } = await sbClient.auth.signInWithPassword({
-          email: authEmail,
+          email: lowerId,
           password: rawPass
         });
 
         if (!authError && authData && authData.user) {
-          console.info('[Phoenix Auth] Authenticated via Supabase Auth service:', authData.user.email);
           const uEmail = (authData.user.email || '').toLowerCase();
-          let matchedRole = 'pranav';
+          let matchedRole = 'vivek';
           if (uEmail.includes('pranav') || uEmail.includes('pb-01')) matchedRole = 'pranav';
           else if (uEmail.includes('arshad') || uEmail.includes('as-02')) matchedRole = 'arshad';
           else if (uEmail.includes('aryan') || uEmail.includes('ab-04')) matchedRole = 'aryan';
-          else if (uEmail.includes('vivek') || uEmail.includes('vg-03')) matchedRole = 'vivek';
 
           if (errBox) errBox.classList.add('hidden');
-          loginAsUser(matchedRole);
-          showToast(`✅ Welcome! Authenticated via Supabase.`);
+          loginAsUser(matchedRole, false);
+          recordAuditLog('USER_LOGIN', `Authenticated via Supabase Auth (${uEmail})`, uEmail);
+          showToast('Welcome! Authenticated via Supabase.');
           return;
         }
       }
     } catch (sbErr) {
-      console.warn('[Phoenix Auth] Supabase Auth check bypassed:', sbErr.message);
+      console.warn('[Phoenix Auth] Supabase Auth check skipped:', sbErr.message);
     }
 
-    // =============================================================
-    // 3. SYNCHRONIZED MEMBER CREDENTIALS (OFFLINE & INSTANT FALLBACK)
-    // =============================================================
+    // 3. OFFLINE / LOCAL SYNCHRONIZED CREDENTIAL VERIFICATION
     let matchedMember = null;
     for (const key of Object.keys(MEMBER_CREDENTIALS)) {
       const mem = MEMBER_CREDENTIALS[key];
@@ -1588,8 +1785,7 @@ window.handleCommonLogin = async function () {
           cleanV === cleanId ||
           v.toLowerCase() === lowerId ||
           mem.name.toLowerCase() === lowerId ||
-          mem.email.toLowerCase() === lowerId ||
-          mem.name.toLowerCase().includes(lowerId)
+          mem.email.toLowerCase() === lowerId
         );
       });
       if (match) {
@@ -1599,30 +1795,20 @@ window.handleCommonLogin = async function () {
     }
 
     if (!matchedMember) {
-      if (errBox && errText) {
-        errText.textContent = `User "${rawId}" not found. Authorized IDs: PB-01 (Pranav), AS-02 (Arshad), VG-03 (Vivek), AB-04 (Aryan), or use 1-Click Access below.`;
-        errBox.classList.remove('hidden');
-      } else {
-        alert(`User "${rawId}" not found.\nAuthorized IDs: PB-01, AS-02, VG-03, AB-04.`);
-      }
+      recordFailedLoginAttempt();
+      showLoginError(`User "${rawId}" not found. Authorized IDs: PB-01 (Pranav), AS-02 (Arshad), VG-03 (Vivek), AB-04 (Aryan).`);
       return;
     }
 
-    // Check valid passwords/PINs
-    if (!matchedMember.validPasswords.includes(rawPass) && rawPass !== '1234' && rawPass !== '2026') {
-      if (errBox && errText) {
-        errText.textContent = `Incorrect password for ${matchedMember.name}. Please enter your valid PIN (Hint: ${matchedMember.validPasswords[0]}).`;
-        errBox.classList.remove('hidden');
-      } else {
-        alert(`Incorrect password for ${matchedMember.name}.\nDefault PIN is ${matchedMember.validPasswords[0]}.`);
-      }
+    if (!matchedMember.validPasswords.includes(rawPass)) {
+      recordFailedLoginAttempt();
+      showLoginError(`Incorrect password for ${matchedMember.name}. Please verify your PIN or password.`);
       return;
     }
 
-    // Successful Login
     if (errBox) errBox.classList.add('hidden');
     loginAsUser(matchedMember.role);
-
+    recordAuditLog('USER_LOGIN', `Authenticated session as ${matchedMember.name} (${matchedMember.memberCode})`, matchedMember.name);
   } finally {
     if (submitBtn) submitBtn.disabled = false;
     if (submitBtnText) submitBtnText.textContent = 'Sign In to Dashboard';
@@ -1638,7 +1824,6 @@ window.quickFillLogin = function (id, pass) {
   if (passInput) passInput.value = pass;
   if (errBox) errBox.classList.add('hidden');
 
-  // Trigger login immediately
   window.handleCommonLogin();
 };
 
@@ -1656,32 +1841,33 @@ window.togglePasswordVisibility = function (inputId) {
   }
 };
 
-window.handlePinLogin = function (role) {
-  const pinInput = document.getElementById(`pin-input-${role}`);
-  const pin = pinInput ? pinInput.value.trim() : '';
-  const validPins = {
-    pranav: ['1001', '1234', '2026'],
-    arshad: ['2002', '1234', '2026'],
-    vivek: ['3003', '1234', '2026'],
-    aryan: ['4004', '1234', '2026']
-  };
-
-  if (!pin || (validPins[role] && validPins[role].includes(pin))) {
-    loginAsUser(role);
-  } else {
-    alert(
-      `Invalid Security PIN for ${
-        role === 'pranav' ? 'Pranav Bansode' : role === 'arshad' ? 'Arshad Shaikh' : role === 'aryan' ? 'Aryan Bhore' : 'Vivek Gajdhane'
-      }.\n\nHint: Default PIN is ${validPins[role] ? validPins[role][0] : '1234'} or use '1-Click Quick Access'.`
-    );
-  }
-};
-
-
 window.logoutUser = function () {
+  const prevRole = STATE.activeRole;
   sessionStorage.removeItem('phoenix_session_user');
   STATE.isAuthenticated = false;
   STATE.activeRole = null;
+  STATE.currentTab = 'dashboard-overview';
+
+  if (window.PhoenixSupabase && typeof window.PhoenixSupabase.logout === 'function') {
+    window.PhoenixSupabase.logout().catch(() => {});
+  }
+
+  [
+    'modal-new-project',
+    'modal-new-income',
+    'modal-new-expense',
+    'modal-assign-task',
+    'modal-invoice',
+    'modal-new-lead',
+    'modal-allocate-lead',
+    'modal-tech-forward',
+    'modal-delivery-approval',
+    'modal-new-drawing',
+    'modal-allocate-reserve'
+  ].forEach((mId) => {
+    const m = document.getElementById(mId);
+    if (m) m.classList.add('hidden');
+  });
 
   const portal = document.getElementById('login-portal-screen');
   const app = document.getElementById('app-workspace');
@@ -1695,21 +1881,8 @@ window.logoutUser = function () {
   if (commonPass) commonPass.value = '';
   if (commonErr) commonErr.classList.add('hidden');
 
-  ['pranav', 'arshad', 'vivek', 'aryan'].forEach((r) => {
-    const input = document.getElementById(`pin-input-${r}`);
-    if (input) input.value = '';
-  });
-
-  showToast('Signed out safely. Please sign in with your Unique ID & Password.');
-};
-
-window.selectEmployeeView = function (memberId) {
-  STATE.selectedEmployeeId = memberId;
-  const roleMap = { 'mem-01': 'pranav', 'mem-02': 'arshad', 'mem-03': 'vivek', 'mem-04': 'aryan' };
-  if (roleMap[memberId]) {
-    window.loginAsUser(roleMap[memberId]);
-  } else {
-    renderEmployeeDashboard(memberId);
+  if (prevRole) {
+    showToast('Signed out safely. Please sign in with your Unique ID & Password.');
   }
 };
 
@@ -1720,7 +1893,7 @@ function updateLoginPills() {
     if (current === 'pranav') {
       sessionText.textContent = 'Session: Pranav Bansode (👑 Founder / Director)';
     } else if (current === 'arshad') {
-      sessionText.textContent = 'Session: Arshad Shaikh (🤝 Co-Founder)';
+      sessionText.textContent = 'Session: Arshad Shaikh (🤝 Co-Founder)';
     } else if (current === 'vivek') {
       sessionText.textContent = 'Session: Vivek Gajdhane (💻 Technical Dept)';
     } else if (current === 'aryan') {
@@ -1737,7 +1910,7 @@ function updateLoginPills() {
       topbarBadge.textContent = '👑 Founder / Director';
     } else if (current === 'arshad') {
       topbarName.textContent = 'Arshad Shaikh';
-      topbarBadge.textContent = '🤝 Co-Founder';
+      topbarBadge.textContent = '🤝 Co-Founder';
     } else if (current === 'vivek') {
       topbarName.textContent = 'Vivek Gajdhane';
       topbarBadge.textContent = '💻 Technical Dept';
@@ -1748,15 +1921,25 @@ function updateLoginPills() {
   }
 }
 
+window.queueCompensationPayout = function (memberId) {
+  if (!requireFounder('queue monthly compensation')) return;
+  const mem = STATE.team.find((m) => m.id === memberId);
+  if (!mem || mem.monthlyCompensation <= 0) return;
+
+  mem.pendingCompensation = mem.monthlyCompensation;
+  recordAuditLog('COMPENSATION_QUEUED', `Queued monthly retainer of ${formatINR(mem.monthlyCompensation)} for ${mem.name}`, 'Pranav Bansode (Founder / Director)');
+  saveAppStateToStorage();
+  renderEmployeeDashboard(STATE.selectedEmployeeId);
+  renderSidebarNav(STATE.currentTab);
+  showToast(`Queued ${formatINR(mem.monthlyCompensation)} retainer for ${mem.name} in Approvals.`);
+};
+
 window.recordCompensationPayout = function (memberId) {
-  if (STATE.activeRole !== 'pranav') {
-    alert('Restricted: Only Pranav Bansode (Founder / Director) can authorize compensation disbursements.');
-    return;
-  }
+  if (!requireFounder('authorize compensation disbursements')) return;
   const mem = STATE.team.find((m) => m.id === memberId);
   if (!mem) return;
 
-  const amount = mem.monthlyCompensation;
+  const amount = mem.pendingCompensation > 0 ? mem.pendingCompensation : mem.monthlyCompensation;
   if (amount <= 0) return alert('Member compensation is non-salaried drawing.');
 
   const payoutId = 'pay-' + Date.now();
@@ -1776,35 +1959,132 @@ window.recordCompensationPayout = function (memberId) {
   mem.paymentsMade = (mem.paymentsMade || 0) + amount;
   mem.pendingCompensation = 0;
 
-  STATE.auditLogs.unshift({
-    id: 'log-' + Date.now(),
-    action: 'COMPENSATION_PAYOUT',
-    details: `Authorized monthly compensation payout of ${formatINR(amount)} to ${mem.name}`,
-    performedBy: 'Pranav Bansode (Founder / Director)',
-    date: new Date().toISOString().replace('T', ' ').slice(0, 16),
-  });
+  recordAuditLog('COMPENSATION_PAYOUT', `Authorized monthly compensation payout of ${formatINR(amount)} to ${mem.name}`, 'Pranav Bansode (Founder / Director)');
+  saveAppStateToStorage();
 
   renderEmployeeDashboard(STATE.selectedEmployeeId);
+  if (STATE.currentTab === 'approvals') renderApprovals();
+  if (STATE.currentTab === 'dashboard-overview') renderFounderDashboard();
+  renderSidebarNav(STATE.currentTab);
   showToast(`Monthly compensation of ${formatINR(amount)} disbursed to ${mem.name}.`);
 };
 
+window.openNewDrawingModal = function () {
+  if (!requireFounder('record executive drawings')) return;
+  const modal = document.getElementById('modal-new-drawing');
+  if (modal) modal.classList.remove('hidden');
+};
+
+window.closeNewDrawingModal = function () {
+  const modal = document.getElementById('modal-new-drawing');
+  if (modal) modal.classList.add('hidden');
+};
+
+window.submitNewDrawing = function () {
+  if (!requireFounder('record executive drawings')) return;
+  const purposeEl = document.getElementById('draw-purpose');
+  const amountEl = document.getElementById('draw-amount');
+  const purpose = purposeEl ? purposeEl.value.trim() : '';
+  const amount = parseFloat(amountEl ? amountEl.value : '0') || 0;
+
+  if (!purpose || amount <= 0) {
+    alert('Please provide a valid purpose and positive amount.');
+    return;
+  }
+
+  const ref = 'PTS-DRAW-' + String(Date.now()).slice(-6);
+  STATE.drawings.unshift({
+    id: 'draw-' + Date.now(),
+    date: new Date().toISOString().split('T')[0],
+    purpose,
+    reference: ref,
+    amount
+  });
+
+  const pranav = STATE.team.find((m) => m.id === 'mem-01');
+  if (pranav) {
+    pranav.drawingsYTD = (pranav.drawingsYTD || 0) + amount;
+  }
+
+  recordAuditLog('FOUNDER_DRAWING', `Recorded executive drawing of ${formatINR(amount)} (${purpose})`, 'Pranav Bansode (Founder / Director)');
+  saveAppStateToStorage();
+
+  if (purposeEl) purposeEl.value = '';
+  if (amountEl) amountEl.value = '';
+  window.closeNewDrawingModal();
+
+  renderEmployeeDashboard('mem-01');
+  if (STATE.currentTab === 'dashboard-overview') renderFounderDashboard();
+  showToast(`Executive drawing of ${formatINR(amount)} recorded.`);
+};
+
 function renderEmployeeDashboard(memberId) {
+  if (!requireAuth('view workspace dossier')) return;
   const container = document.getElementById('employee-dossier-container');
   if (!container) return;
 
-  const activeUser = STATE.activeRole || 'pranav';
+  const activeUser = STATE.activeRole;
   updateLoginPills();
 
   if (activeUser === 'pranav') {
-    // -------------------------------------------------------------
-    // PRANAV (FOUNDER) SESSION:
-    // His own executive drawings & capital position +
-    // DETAILED OVERVIEW OF REST TWO PEOPLE (ARSHAD SHAIKH & VIVEK GAJDHANE)
-    // -------------------------------------------------------------
     const pranav = STATE.team.find((m) => m.id === 'mem-01') || STATE.team[0];
     const arshad = STATE.team.find((m) => m.id === 'mem-02');
     const vivek = STATE.team.find((m) => m.id === 'mem-03');
+    const aryan = STATE.team.find((m) => m.id === 'mem-04');
     const m = calculateMetrics();
+    const totalDrawingsYTD = (STATE.drawings || []).reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
+
+    const renderTeamCard = (member, badgeText, badgeColors, initials, scopeText, allocHtml) => {
+      const mId = safeId(member.id);
+      return `
+        <div class="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+          <div class="flex items-start justify-between gap-2">
+            <div class="flex items-center gap-3">
+              <div class="w-11 h-11 rounded-xl bg-[#026047] text-[#fffde8] flex items-center justify-center font-black text-base shrink-0">
+                ${escapeHtml(initials)}
+              </div>
+              <div>
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <h4 class="text-sm font-black text-slate-900 dark:text-white">${escapeHtml(member.name)}</h4>
+                  <span class="px-2 py-0.5 rounded text-[9px] font-bold ${badgeColors}">${escapeHtml(badgeText)}</span>
+                </div>
+                <p class="text-[11px] text-slate-500">${escapeHtml(scopeText)}</p>
+              </div>
+            </div>
+            ${member.pendingCompensation > 0
+              ? `<button onclick="recordCompensationPayout('${mId}')" class="px-2.5 py-1.5 rounded-lg bg-[#026047] hover:bg-[#024d39] text-[#fffde8] text-[11px] font-bold shadow-sm flex items-center gap-1 transition shrink-0">
+                  <span>👑</span> Clear (${formatINR(member.pendingCompensation, false)})
+                </button>`
+              : `<button onclick="queueCompensationPayout('${mId}')" class="px-2.5 py-1 rounded-lg border border-[#026047]/30 bg-emerald-50 dark:bg-emerald-950/50 text-[#026047] dark:text-emerald-300 hover:bg-emerald-100 text-[10px] font-bold transition shrink-0">
+                  + Queue Retainer
+                </button>`
+            }
+          </div>
+
+          <div class="grid grid-cols-3 gap-2 text-center">
+            <div class="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800">
+              <span class="text-[10px] text-slate-400 uppercase font-semibold">Monthly</span>
+              <div class="font-bold text-xs text-slate-900 dark:text-white mt-0.5">${formatINR(member.monthlyCompensation, false)}</div>
+            </div>
+            <div class="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800">
+              <span class="text-[10px] text-slate-400 uppercase font-semibold">Pending</span>
+              <div class="font-bold text-xs ${member.pendingCompensation > 0 ? 'text-amber-600' : 'text-emerald-600'} mt-0.5">
+                ${member.pendingCompensation > 0 ? formatINR(member.pendingCompensation, false) : '₹0'}
+              </div>
+            </div>
+            <div class="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800">
+              <span class="text-[10px] text-slate-400 uppercase font-semibold">Paid YTD</span>
+              <div class="font-bold text-xs text-[#026047] dark:text-emerald-400 mt-0.5">${formatINR(member.paymentsMade, false)}</div>
+            </div>
+          </div>
+
+          <div class="space-y-1.5 text-xs">
+            <span class="text-[10px] text-slate-400 font-bold uppercase">Deliverables &amp; Scope</span>
+            ${allocHtml}
+          </div>
+        </div>
+      `;
+    };
 
     container.innerHTML = `
       <!-- Active Login Session Indicator Banner -->
@@ -1816,7 +2096,7 @@ function renderEmployeeDashboard(memberId) {
           <span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-[#026047] text-[#fffde8]">👑 Founder / Director</span>
         </div>
         <div class="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-          Executive Authority: Team Oversight & Payout Governance for Arshad Shaikh & Vivek Gajdhane
+          Executive Authority: Team Oversight &amp; Payout Governance
         </div>
       </div>
 
@@ -1830,35 +2110,34 @@ function renderEmployeeDashboard(memberId) {
             </div>
             <div>
               <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-[#fffde8] text-[#026047] mb-1">
-                <span>👑</span> FOUNDER & DIRECTOR
+                <span>👑</span> FOUNDER &amp; DIRECTOR
               </div>
-              <h2 class="text-xl font-black text-[#fffde8]">${pranav.name}</h2>
-              <p class="text-xs text-[#fffde8]/80">Sole Signatory • Phoenix Tech Solutions Private Limited</p>
+              <h2 class="text-xl font-black text-[#fffde8]">${escapeHtml(pranav.name)}</h2>
+              <p class="text-xs text-[#fffde8]/80">Sole Signatory &bull; Phoenix Tech Solutions Private Limited</p>
             </div>
           </div>
           <div class="p-3 rounded-xl bg-white/10 backdrop-blur border border-white/20 text-xs sm:text-right">
             <span class="text-[10px] text-[#fffde8]/70 block uppercase font-bold">Remuneration Model</span>
-            <div class="font-extrabold text-sm text-[#fffde8] mt-0.5">Retained Equity & Executive Drawings</div>
-            <div class="text-[11px] text-emerald-300 mt-1">Non-Salaried • 100% Director Governance</div>
+            <div class="font-extrabold text-sm text-[#fffde8] mt-0.5">Retained Equity &amp; Executive Drawings</div>
+            <div class="text-[11px] text-emerald-300 mt-1">Non-Salaried &bull; 100% Director Governance</div>
           </div>
         </div>
       </div>
 
       <!-- Founder Drawings & Capital Position -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <!-- 1. Compensation & Capital Position -->
         <div class="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
           <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
-            <h3 class="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">1. Founder Drawings & Capital Position</h3>
+            <h3 class="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">1. Founder Drawings &amp; Capital Position</h3>
             <span class="text-[10px] px-2 py-0.5 rounded bg-emerald-100 text-[#026047] font-bold">Direct Profit Share</span>
           </div>
           <div class="grid grid-cols-2 gap-3 pt-1">
             <div class="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800">
               <span class="text-[10px] text-slate-400 font-bold uppercase">Executive Drawings YTD</span>
-              <div class="text-lg font-bold text-[#026047] dark:text-emerald-400 mt-0.5">${formatINR(pranav.drawingsYTD || 15000)}</div>
+              <div class="text-lg font-bold text-[#026047] dark:text-emerald-400 mt-0.5">${formatINR(totalDrawingsYTD)}</div>
             </div>
             <div class="p-3 rounded-lg bg-[#fffde8] dark:bg-[#026047]/20 border border-[#026047]/30">
-              <span class="text-[10px] text-[#026047] font-bold uppercase">Lighthearted Company Cash</span>
+              <span class="text-[10px] text-[#026047] dark:text-emerald-300 font-bold uppercase">Unencumbered Company Cash</span>
               <div class="text-lg font-black text-[#026047] dark:text-[#fffde8] mt-0.5">${formatINR(m.availableCompanyCash)}</div>
             </div>
           </div>
@@ -1867,11 +2146,10 @@ function renderEmployeeDashboard(memberId) {
           </p>
         </div>
 
-        <!-- 2. Assigned Projects & Strategic Governance -->
         <div class="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
           <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
             <h3 class="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">2. Strategic Project Governance</h3>
-            <span class="text-[10px] font-mono text-slate-400">LEADX & SMART REVIEW</span>
+            <span class="text-[10px] font-mono text-slate-400">LEADX &amp; SMART REVIEW</span>
           </div>
           <div class="space-y-2 text-xs">
             <div class="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800">
@@ -1890,53 +2168,55 @@ function renderEmployeeDashboard(memberId) {
       <div class="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
         <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
           <div>
-            <h3 class="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">3. Executive Drawings & Payout Ledger</h3>
-            <p class="text-[11px] text-slate-500">Confidential director disbursements against audited operating profits (Basic 10k-15k range)</p>
+            <h3 class="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">3. Executive Drawings &amp; Payout Ledger</h3>
+            <p class="text-[11px] text-slate-500">Confidential director disbursements against audited operating profits</p>
           </div>
-          <span class="text-[10px] px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-mono">Confidential</span>
+          <button onclick="openNewDrawingModal()" class="px-3 py-1 rounded-lg bg-[#026047] text-[#fffde8] text-xs font-bold hover:bg-[#024d39] transition">
+            + Record Drawing
+          </button>
         </div>
         <div class="overflow-x-auto">
           <table class="w-full text-left text-xs">
             <thead>
               <tr class="border-b border-slate-200 dark:border-slate-700 text-slate-500 font-semibold text-[11px]">
                 <th class="py-2.5 px-3">Date</th>
-                <th class="py-2.5 px-3">Purpose & Description</th>
+                <th class="py-2.5 px-3">Purpose &amp; Description</th>
                 <th class="py-2.5 px-3 font-mono">Reference</th>
                 <th class="py-2.5 px-3 text-right">Amount (₹)</th>
                 <th class="py-2.5 px-3 text-center">Status</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
-              ${(STATE.drawings || []).map((d) => `
-                <tr>
-                  <td class="py-3 px-3 font-mono text-slate-500">${formatDate(d.date)}</td>
-                  <td class="py-3 px-3 font-semibold text-slate-900 dark:text-white">${d.purpose}</td>
-                  <td class="py-3 px-3 font-mono text-slate-500 text-[11px]">${d.reference}</td>
-                  <td class="py-3 px-3 text-right font-black text-[#026047] dark:text-emerald-400">${formatINR(d.amount)}</td>
-                  <td class="py-3 px-3 text-center">
-                    <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">✓ Disbursed</span>
-                  </td>
-                </tr>
-              `).join('')}
+              ${(STATE.drawings || []).length === 0
+                ? '<tr><td colspan="5" class="py-6 text-center text-slate-400 italic">No executive drawings recorded yet.</td></tr>'
+                : (STATE.drawings || []).map((d) => `
+                  <tr>
+                    <td class="py-3 px-3 font-mono text-slate-500">${formatDate(d.date)}</td>
+                    <td class="py-3 px-3 font-semibold text-slate-900 dark:text-white">${escapeHtml(d.purpose)}</td>
+                    <td class="py-3 px-3 font-mono text-slate-500 text-[11px]">${escapeHtml(d.reference)}</td>
+                    <td class="py-3 px-3 text-right font-black text-[#026047] dark:text-emerald-400">${formatINR(d.amount)}</td>
+                    <td class="py-3 px-3 text-center">
+                      <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">✓ Disbursed</span>
+                    </td>
+                  </tr>
+                `).join('')}
             </tbody>
           </table>
         </div>
       </div>
 
-      <!-- ============================================================== -->
-      <!-- 4. DETAILED OVERVIEW OF REST TWO PEOPLE (ARSHAD SHAIKH & VIVEK GAJDHANE) -->
-      <!-- ============================================================== -->
+      <!-- 4. DETAILED OVERVIEW: CORE TEAM MEMBERS -->
       <div class="space-y-4 pt-4 border-t-2 border-slate-200 dark:border-slate-800">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
             <div class="flex items-center gap-2">
               <span class="text-base">👑</span>
               <h3 class="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">
-                Detailed Overview: Core Team Members (Arshad Shaikh & Vivek Gajdhane)
+                Detailed Overview: Core Team Members
               </h3>
             </div>
             <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Comprehensive individual member portfolios, monthly compensation tracking, deliverables, and director payout authorization.
+              Individual member portfolios, monthly compensation tracking, deliverables, and director payout authorization.
             </p>
           </div>
           <span class="px-2.5 py-1 rounded-full bg-[#026047] text-[#fffde8] text-[10px] font-black uppercase tracking-wider self-start sm:self-auto">
@@ -1944,121 +2224,40 @@ function renderEmployeeDashboard(memberId) {
           </span>
         </div>
 
-        <!-- 2 Side-by-Side Detailed Dossiers -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <!-- Member 1: Arshad Shaikh -->
-          <div class="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-            <div class="flex items-start justify-between gap-3">
-              <div class="flex items-center gap-3">
-                <div class="w-12 h-12 rounded-xl bg-[#026047] text-[#fffde8] flex items-center justify-center font-black text-lg">
-                  AS
-                </div>
-                <div>
-                  <div class="flex items-center gap-1.5">
-                    <h4 class="text-sm font-black text-slate-900 dark:text-white">Arshad Shaikh</h4>
-                    <span class="px-2 py-0.5 rounded text-[9px] font-bold bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300">🤝 CO-FOUNDER</span>
-                  </div>
-                  <p class="text-[11px] text-slate-500">Marketing, Meetings & Business Planning</p>
-                </div>
-              </div>
-              ${arshad.pendingCompensation > 0
-                ? `<button onclick="recordCompensationPayout('mem-02')" class="px-3 py-1.5 rounded-lg bg-[#026047] hover:bg-[#024d39] text-[#fffde8] text-xs font-bold shadow-sm flex items-center gap-1 transition">
-                    <span>👑</span> Clear Payout (${formatINR(arshad.monthlyCompensation)})
-                  </button>`
-                : `<span class="px-2 py-1 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">✓ Settled</span>`
-              }
-            </div>
-
-            <div class="grid grid-cols-3 gap-2 text-center">
-              <div class="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800">
-                <span class="text-[10px] text-slate-400 uppercase font-semibold">Monthly Agreed</span>
-                <div class="font-bold text-sm text-slate-900 dark:text-white mt-0.5">${formatINR(arshad.monthlyCompensation)}</div>
-              </div>
-              <div class="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800">
-                <span class="text-[10px] text-slate-400 uppercase font-semibold">Pending Due</span>
-                <div class="font-bold text-sm ${arshad.pendingCompensation > 0 ? 'text-amber-600' : 'text-emerald-600'} mt-0.5">
-                  ${arshad.pendingCompensation > 0 ? formatINR(arshad.pendingCompensation) : '₹0'}
-                </div>
-              </div>
-              <div class="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800">
-                <span class="text-[10px] text-slate-400 uppercase font-semibold">Total Paid</span>
-                <div class="font-bold text-sm text-[#026047] dark:text-emerald-400 mt-0.5">${formatINR(arshad.paymentsMade)}</div>
-              </div>
-            </div>
-
-            <div class="space-y-2 text-xs">
-              <span class="text-[10px] text-slate-400 font-bold uppercase">Project Deliverables & Allocation</span>
-              <div class="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/40 text-[11px] space-y-1.5 border border-slate-100 dark:border-slate-800">
-                <div class="flex justify-between items-center">
-                  <span class="font-bold text-slate-900 dark:text-white">LeadX (40% Split):</span>
-                  <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-[#026047] font-semibold">Active</span>
-                </div>
-                <p class="text-slate-500">Client pitch meetings, outbound B2B marketing & pipeline qualification funnel.</p>
-                <div class="flex justify-between items-center pt-1 border-t border-slate-200 dark:border-slate-700">
-                  <span class="font-bold text-slate-900 dark:text-white">Smart Review (35% Split):</span>
-                  <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-[#026047] font-semibold">Active</span>
-                </div>
-                <p class="text-slate-500">Hospitality outreach, client onboarding, business idea research & digital strategy.</p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Member 2: Vivek Gajdhane -->
-          <div class="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-            <div class="flex items-start justify-between gap-3">
-              <div class="flex items-center gap-3">
-                <div class="w-12 h-12 rounded-xl bg-[#026047] text-[#fffde8] flex items-center justify-center font-black text-lg">
-                  VG
-                </div>
-                <div>
-                  <div class="flex items-center gap-1.5">
-                    <h4 class="text-sm font-black text-slate-900 dark:text-white">Vivek Gajdhane</h4>
-                    <span class="px-2 py-0.5 rounded text-[9px] font-bold bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300">💻 TECHNICAL DEPT</span>
-                  </div>
-                  <p class="text-[11px] text-slate-500">Development, Architecture & Implementation</p>
-                </div>
-              </div>
-              ${vivek.pendingCompensation > 0
-                ? `<button onclick="recordCompensationPayout('mem-03')" class="px-3 py-1.5 rounded-lg bg-[#026047] hover:bg-[#024d39] text-[#fffde8] text-xs font-bold shadow-sm flex items-center gap-1 transition">
-                    <span>👑</span> Clear Payout (${formatINR(vivek.monthlyCompensation)})
-                  </button>`
-                : `<span class="px-2 py-1 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">✓ Settled</span>`
-              }
-            </div>
-
-            <div class="grid grid-cols-3 gap-2 text-center">
-              <div class="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800">
-                <span class="text-[10px] text-slate-400 uppercase font-semibold">Monthly Agreed</span>
-                <div class="font-bold text-sm text-slate-900 dark:text-white mt-0.5">${formatINR(vivek.monthlyCompensation)}</div>
-              </div>
-              <div class="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800">
-                <span class="text-[10px] text-slate-400 uppercase font-semibold">Pending Due</span>
-                <div class="font-bold text-sm ${vivek.pendingCompensation > 0 ? 'text-amber-600' : 'text-emerald-600'} mt-0.5">
-                  ${vivek.pendingCompensation > 0 ? formatINR(vivek.pendingCompensation) : '₹0'}
-                </div>
-              </div>
-              <div class="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800">
-                <span class="text-[10px] text-slate-400 uppercase font-semibold">Total Paid</span>
-                <div class="font-bold text-sm text-[#026047] dark:text-emerald-400 mt-0.5">${formatINR(vivek.paymentsMade)}</div>
-              </div>
-            </div>
-
-            <div class="space-y-2 text-xs">
-              <span class="text-[10px] text-slate-400 font-bold uppercase">Project Deliverables & Allocation</span>
-              <div class="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/40 text-[11px] space-y-1.5 border border-slate-100 dark:border-slate-800">
-                <div class="flex justify-between items-center">
-                  <span class="font-bold text-slate-900 dark:text-white">LeadX (30% Split):</span>
-                  <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-[#026047] font-semibold">Active</span>
-                </div>
-                <p class="text-slate-500">AWS scrapers, cluster architecture, database pipelines & portal UI.</p>
-                <div class="flex justify-between items-center pt-1 border-t border-slate-200 dark:border-slate-700">
-                  <span class="font-bold text-slate-900 dark:text-white">Smart Review (40% Split):</span>
-                  <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-[#026047] font-semibold">Active</span>
-                </div>
-                <p class="text-slate-500">Sentiment NLP model integration, feedback capture portals, QR routing engine & APIs.</p>
-              </div>
-            </div>
-          </div>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          ${renderTeamCard(
+            arshad,
+            '🤝 CO-FOUNDER',
+            'bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300',
+            'AS',
+            'Marketing, Meetings & Business Planning',
+            `<div class="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/40 text-[11px] space-y-1.5 border border-slate-100 dark:border-slate-800">
+               <div><strong>LeadX (40% Split):</strong> Client pitch meetings &amp; B2B pipeline.</div>
+               <div class="pt-1 border-t border-slate-200 dark:border-slate-700"><strong>Smart Review (35% Split):</strong> Hospitality outreach &amp; digital strategy.</div>
+             </div>`
+          )}
+          ${renderTeamCard(
+            vivek,
+            '💻 TECHNICAL DEPT',
+            'bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300',
+            'VG',
+            'Development, Architecture & Implementation',
+            `<div class="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/40 text-[11px] space-y-1.5 border border-slate-100 dark:border-slate-800">
+               <div><strong>LeadX (30% Split):</strong> AWS scrapers, cluster architecture &amp; portal UI.</div>
+               <div class="pt-1 border-t border-slate-200 dark:border-slate-700"><strong>Smart Review (40% Split):</strong> Sentiment NLP, QR routing &amp; APIs.</div>
+             </div>`
+          )}
+          ${aryan ? renderTeamCard(
+            aryan,
+            '🎯 RESEARCH LEAD',
+            'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300',
+            'AB',
+            'Market Research, Scouting & Lead Qualification',
+            `<div class="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/40 text-[11px] space-y-1.5 border border-slate-100 dark:border-slate-800">
+               <div><strong>Pipeline Entry:</strong> B2B client discovery &amp; requirement scoping.</div>
+               <div class="pt-1 border-t border-slate-200 dark:border-slate-700"><strong>Routing:</strong> Submits qualified deals directly to Founder Pranav.</div>
+             </div>`
+          ) : ''}
         </div>
 
         <!-- Combined Team Compensation Payout Ledger -->
@@ -2066,7 +2265,7 @@ function renderEmployeeDashboard(memberId) {
           <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
             <div>
               <h3 class="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">Historical Team Compensation Ledger</h3>
-              <p class="text-[11px] text-slate-500">Past disbursements for Arshad Shaikh & Vivek Gajdhane authorized by Director</p>
+              <p class="text-[11px] text-slate-500">Disbursements authorized by Founder &amp; Director</p>
             </div>
             <span class="text-[10px] px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-bold">Audited</span>
           </div>
@@ -2085,20 +2284,22 @@ function renderEmployeeDashboard(memberId) {
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
-                ${(STATE.payouts || []).map((p) => `
-                  <tr>
-                    <td class="py-3 px-3 font-bold text-slate-900 dark:text-white">${p.memberName}</td>
-                    <td class="py-3 px-3 text-slate-600 dark:text-slate-400">${p.month}</td>
-                    <td class="py-3 px-3 font-mono text-slate-500">${formatDate(p.paidDate)}</td>
-                    <td class="py-3 px-3 font-mono text-slate-500 text-[11px]">${p.reference}</td>
-                    <td class="py-3 px-3 text-slate-600 dark:text-slate-400">${p.paymentMethod}</td>
-                    <td class="py-3 px-3 text-right font-black text-[#026047] dark:text-emerald-400">${formatINR(p.amount)}</td>
-                    <td class="py-3 px-3 text-center">
-                      <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">✓ Paid</span>
-                    </td>
-                    <td class="py-3 px-3 text-right text-slate-500 text-[11px]">${p.authorizedBy}</td>
-                  </tr>
-                `).join('')}
+                ${(STATE.payouts || []).length === 0
+                  ? '<tr><td colspan="8" class="py-6 text-center text-slate-400 italic">No compensation disbursements recorded yet.</td></tr>'
+                  : (STATE.payouts || []).map((p) => `
+                    <tr>
+                      <td class="py-3 px-3 font-bold text-slate-900 dark:text-white">${escapeHtml(p.memberName)}</td>
+                      <td class="py-3 px-3 text-slate-600 dark:text-slate-400">${escapeHtml(p.month)}</td>
+                      <td class="py-3 px-3 font-mono text-slate-500">${formatDate(p.paidDate)}</td>
+                      <td class="py-3 px-3 font-mono text-slate-500 text-[11px]">${escapeHtml(p.reference)}</td>
+                      <td class="py-3 px-3 text-slate-600 dark:text-slate-400">${escapeHtml(p.paymentMethod)}</td>
+                      <td class="py-3 px-3 text-right font-black text-[#026047] dark:text-emerald-400">${formatINR(p.amount)}</td>
+                      <td class="py-3 px-3 text-center">
+                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">✓ Paid</span>
+                      </td>
+                      <td class="py-3 px-3 text-right text-slate-500 text-[11px]">${escapeHtml(p.authorizedBy)}</td>
+                    </tr>
+                  `).join('')}
               </tbody>
             </table>
           </div>
@@ -2106,22 +2307,21 @@ function renderEmployeeDashboard(memberId) {
       </div>
     `;
   } else {
-    // -------------------------------------------------------------
-    // NON-FOUNDER SESSION (ARSHAD SHAIKH OR VIVEK GAJDHANE):
-    // Private individual portfolio only. Cannot see other members or executive drawings.
-    // -------------------------------------------------------------
+    // NON-FOUNDER SESSION: Private individual portfolio only.
     const isArshad = activeUser === 'arshad';
-    const isVivek = activeUser === 'vivek';
     const isAryan = activeUser === 'aryan';
-    let currentMemberId = 'mem-03';
-    if (isArshad) currentMemberId = 'mem-02';
-    else if (isAryan) currentMemberId = 'mem-04';
+    const currentMemberId = isArshad ? 'mem-02' : (isAryan ? 'mem-04' : 'mem-03');
 
     const mem = STATE.team.find((m) => m.id === currentMemberId) || STATE.team[isArshad ? 1 : (isAryan ? 3 : 2)];
-    let initials = isArshad ? 'AS' : (isAryan ? 'AB' : 'VG');
-    const roleEmoji = isArshad ? '🤝' : '💻';
-    const prj1Share = isArshad ? 40 : 30;
-    const prj2Share = isArshad ? 35 : 40;
+    const initials = isArshad ? 'AS' : (isAryan ? 'AB' : 'VG');
+    const roleEmoji = isArshad ? '🤝' : (isAryan ? '🎯' : '💻');
+    const badgeColorClass = isArshad
+      ? 'bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300'
+      : isAryan
+      ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300'
+      : 'bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300';
+    const prj1Share = isArshad ? '40% Share' : (isAryan ? 'Lead Pipeline' : '30% Share');
+    const prj2Share = isArshad ? '35% Share' : (isAryan ? 'Lead Pipeline' : '40% Share');
     const memberPayouts = (STATE.payouts || []).filter((p) => p.memberId === currentMemberId);
 
     container.innerHTML = `
@@ -2130,17 +2330,13 @@ function renderEmployeeDashboard(memberId) {
         <div class="flex items-center gap-2">
           <span class="w-2 h-2 rounded-full ${isArshad ? 'bg-blue-500' : (isAryan ? 'bg-emerald-500' : 'bg-purple-500')}"></span>
           <span class="text-slate-500 dark:text-slate-400">Authenticated Session:</span>
-          <span class="font-extrabold text-slate-900 dark:text-white">${mem.name}</span>
-          <span class="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
-            isArshad
-              ? 'bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300'
-              : 'bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300'
-          }">
-            ${roleEmoji} ${mem.designation}
+          <span class="font-extrabold text-slate-900 dark:text-white">${escapeHtml(mem.name)}</span>
+          <span class="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${badgeColorClass}">
+            ${roleEmoji} ${escapeHtml(mem.designation)}
           </span>
         </div>
         <div class="text-[11px] text-slate-500 dark:text-slate-400">
-          Private Individual Portfolio • Company Executive Drawings Confidential
+          Private Individual Portfolio &bull; Company Executive Drawings Confidential
         </div>
       </div>
 
@@ -2153,9 +2349,9 @@ function renderEmployeeDashboard(memberId) {
             </div>
             <div>
               <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 mb-1">
-                <span>${roleEmoji}</span> ${mem.designation.toUpperCase()}
+                <span>${roleEmoji}</span> ${escapeHtml(mem.designation.toUpperCase())}
               </div>
-              <h2 class="text-xl font-black text-slate-900 dark:text-white">${mem.name}</h2>
+              <h2 class="text-xl font-black text-slate-900 dark:text-white">${escapeHtml(mem.name)}</h2>
               <p class="text-xs text-slate-500 dark:text-slate-400">Phoenix Tech Solutions Private Limited</p>
             </div>
           </div>
@@ -2171,7 +2367,7 @@ function renderEmployeeDashboard(memberId) {
         <div class="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
           <span class="text-xs text-slate-400 font-medium">Monthly Agreed Compensation</span>
           <div class="text-xl font-bold text-slate-900 dark:text-white">${formatINR(mem.monthlyCompensation)}</div>
-          <div class="text-[11px] text-slate-500 pt-1">Fixed core member remuneration (Basic 10k-15k)</div>
+          <div class="text-[11px] text-slate-500 pt-1">Fixed core member remuneration</div>
         </div>
 
         <div class="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
@@ -2195,7 +2391,7 @@ function renderEmployeeDashboard(memberId) {
       <div class="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
         <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
           <div>
-            <h3 class="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">Your Payment History & Payout Ledger</h3>
+            <h3 class="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">Your Payment History &amp; Payout Ledger</h3>
             <p class="text-[11px] text-slate-500">Verified bank payout transactions authorized by Founder / Director</p>
           </div>
           <span class="text-[10px] px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-bold">Reconciled</span>
@@ -2214,19 +2410,21 @@ function renderEmployeeDashboard(memberId) {
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
-              ${memberPayouts.map((p) => `
-                <tr>
-                  <td class="py-3 px-3 font-bold text-slate-900 dark:text-white">${p.month}</td>
-                  <td class="py-3 px-3 font-mono text-slate-500">${formatDate(p.paidDate)}</td>
-                  <td class="py-3 px-3 font-mono text-slate-500 text-[11px]">${p.reference}</td>
-                  <td class="py-3 px-3 text-slate-600 dark:text-slate-400">${p.paymentMethod}</td>
-                  <td class="py-3 px-3 text-right font-black text-[#026047] dark:text-emerald-400">${formatINR(p.amount)}</td>
-                  <td class="py-3 px-3 text-center">
-                    <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">✓ Paid</span>
-                  </td>
-                  <td class="py-3 px-3 text-right font-semibold text-slate-700 dark:text-slate-300">${p.authorizedBy}</td>
-                </tr>
-              `).join('')}
+              ${memberPayouts.length === 0
+                ? '<tr><td colspan="7" class="py-6 text-center text-slate-400 italic">No disbursements recorded for your account yet.</td></tr>'
+                : memberPayouts.map((p) => `
+                  <tr>
+                    <td class="py-3 px-3 font-bold text-slate-900 dark:text-white">${escapeHtml(p.month)}</td>
+                    <td class="py-3 px-3 font-mono text-slate-500">${formatDate(p.paidDate)}</td>
+                    <td class="py-3 px-3 font-mono text-slate-500 text-[11px]">${escapeHtml(p.reference)}</td>
+                    <td class="py-3 px-3 text-slate-600 dark:text-slate-400">${escapeHtml(p.paymentMethod)}</td>
+                    <td class="py-3 px-3 text-right font-black text-[#026047] dark:text-emerald-400">${formatINR(p.amount)}</td>
+                    <td class="py-3 px-3 text-center">
+                      <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">✓ Paid</span>
+                    </td>
+                    <td class="py-3 px-3 text-right font-semibold text-slate-700 dark:text-slate-300">${escapeHtml(p.authorizedBy)}</td>
+                  </tr>
+                `).join('')}
             </tbody>
           </table>
         </div>
@@ -2234,17 +2432,16 @@ function renderEmployeeDashboard(memberId) {
 
       <!-- Assigned Projects & Key Deliverables + Incentives -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <!-- Assigned Projects & Responsibilities -->
         <div class="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
           <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
-            <h3 class="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">Assigned Projects & Key Deliverables</h3>
+            <h3 class="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">Assigned Projects &amp; Key Deliverables</h3>
             <span class="text-[10px] font-mono text-slate-400">ACTIVE</span>
           </div>
           <div class="space-y-3 text-xs">
             <div class="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-1">
               <div class="flex items-center justify-between">
                 <span class="font-bold text-slate-900 dark:text-white">LeadX (PRJ-LEADX)</span>
-                <span class="text-[10px] px-2 py-0.5 rounded bg-[#fffde8] text-[#026047] font-bold border border-[#026047]/30">${prj1Share}% Share</span>
+                <span class="text-[10px] px-2 py-0.5 rounded bg-[#fffde8] text-[#026047] font-bold border border-[#026047]/30">${prj1Share}</span>
               </div>
               <p class="text-[11px] text-slate-600 dark:text-slate-400">
                 ${isArshad
@@ -2257,7 +2454,7 @@ function renderEmployeeDashboard(memberId) {
             <div class="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-1">
               <div class="flex items-center justify-between">
                 <span class="font-bold text-slate-900 dark:text-white">Smart Review Management (PRJ-SRM)</span>
-                <span class="text-[10px] px-2 py-0.5 rounded bg-[#fffde8] text-[#026047] font-bold border border-[#026047]/30">${prj2Share}% Share</span>
+                <span class="text-[10px] px-2 py-0.5 rounded bg-[#fffde8] text-[#026047] font-bold border border-[#026047]/30">${prj2Share}</span>
               </div>
               <p class="text-[11px] text-slate-600 dark:text-slate-400">
                 ${isArshad
@@ -2270,7 +2467,6 @@ function renderEmployeeDashboard(memberId) {
           </div>
         </div>
 
-        <!-- Incentives & Profit Sharing Engine -->
         <div class="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
           <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
             <h3 class="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">Incentive Sharing Engine</h3>
@@ -2285,20 +2481,19 @@ function renderEmployeeDashboard(memberId) {
               Contribution pool distributes among assigned members upon project cost recovery and Founder approval.
             </p>
             <div class="pt-2 border-t border-[#026047]/20 flex items-center justify-between text-[11px]">
-              <span class="text-slate-500">LeadX Contractual Split:</span>
-              <strong class="text-slate-900 dark:text-white">${prj1Share}% of Pool</strong>
+              <span class="text-slate-500">LeadX Allocation:</span>
+              <strong class="text-slate-900 dark:text-white">${prj1Share}</strong>
             </div>
             <div class="flex items-center justify-between text-[11px]">
-              <span class="text-slate-500">Smart Review Contractual Split:</span>
-              <strong class="text-slate-900 dark:text-white">${prj2Share}% of Pool</strong>
+              <span class="text-slate-500">Smart Review Allocation:</span>
+              <strong class="text-slate-900 dark:text-white">${prj2Share}</strong>
             </div>
           </div>
         </div>
       </div>
-    `
 
       ${renderLeadPipelineSection()}
-    ;
+    `;
   }
 }
 
@@ -2326,9 +2521,18 @@ function filterApprovals(category) {
 }
 window.filterApprovals = filterApprovals;
 
+function getProjectDisplayName(projectId, fallbackName, generalLabel = 'Company General') {
+  if (fallbackName) return fallbackName;
+  if (!projectId) return generalLabel;
+  const prj = (STATE.projects || []).find((p) => p.id === projectId);
+  return prj ? prj.name : generalLabel;
+}
+
 function renderApprovals() {
   const metricsEl = document.getElementById('approvals-metrics-container');
   const tableBody = document.getElementById('approvals-table-body');
+  const leadPipeEl = document.getElementById('approvals-lead-pipeline');
+  const approveAllBtn = document.getElementById('btn-approve-all-pending');
   if (!tableBody) return;
 
   // Build unified list of pending approval requests
@@ -2341,13 +2545,13 @@ function renderApprovals() {
         type: 'INCOME',
         rawType: 'income',
         id: inc.id,
-        title: inc.description || 'Client Inflow Deal',
-        purpose: `${inc.client} Contract Payment`,
-        submittedBy: inc.memberName || 'Team Member',
-        project: inc.projectName || (inc.project === 'prj-leadx' ? 'LeadX' : 'Smart Review'),
-        amount: inc.amount,
+        title: inc.source || 'Client Inflow Deal',
+        purpose: `${inc.clientName || 'Client'} Contract Payment`,
+        submittedBy: inc.createdBy || 'Team Member',
+        project: getProjectDisplayName(inc.projectId, inc.projectName, 'LeadX'),
+        amount: Number(inc.amount) || 0,
         scopeDisplay: formatINR(inc.amount),
-        date: inc.date,
+        date: inc.paymentDate || '',
         statusLabel: 'Pending Director Clearance',
         badgeClass: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300',
       });
@@ -2362,17 +2566,12 @@ function renderApprovals() {
         rawType: 'expense',
         id: exp.id,
         title: exp.title,
-        purpose: `${exp.category} Reimbursement`,
-        submittedBy: exp.memberName || 'Team Member',
-        project:
-          exp.project === 'prj-leadx'
-            ? 'LeadX'
-            : exp.project === 'prj-srm'
-            ? 'Smart Review'
-            : 'Company General',
-        amount: exp.amount,
+        purpose: `${formatExpenseCategory(exp.category)} Reimbursement`,
+        submittedBy: exp.paidBy || 'Team Member',
+        project: getProjectDisplayName(exp.projectId, exp.projectName, 'Company General'),
+        amount: Number(exp.amount) || 0,
         scopeDisplay: formatINR(exp.amount),
-        date: exp.date,
+        date: exp.date || '',
         statusLabel: 'Awaiting Sign-off',
         badgeClass: 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300',
       });
@@ -2387,10 +2586,10 @@ function renderApprovals() {
         rawType: 'payout',
         id: mem.id,
         title: `${mem.name} Monthly Compensation`,
-        purpose: 'November 2026 Monthly Retainer',
+        purpose: 'Monthly Agreed Retainer',
         submittedBy: mem.name,
         project: mem.role,
-        amount: mem.pendingCompensation,
+        amount: Number(mem.pendingCompensation) || 0,
         scopeDisplay: formatINR(mem.pendingCompensation),
         date: new Date().toISOString().split('T')[0],
         statusLabel: 'Disbursement Due',
@@ -2412,12 +2611,19 @@ function renderApprovals() {
         project: task.projectName || 'LeadX',
         amount: 0,
         scopeDisplay: `Deliverable (${task.priority})`,
-        date: task.dueDate || task.assignedDate,
+        date: task.dueDate || task.assignedDate || '',
         statusLabel: 'Review Pending',
         badgeClass: 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300',
       });
     }
   });
+
+  if (approveAllBtn) {
+    const hasPending = pendingItems.length > 0;
+    approveAllBtn.disabled = !hasPending;
+    approveAllBtn.classList.toggle('opacity-50', !hasPending);
+    approveAllBtn.classList.toggle('cursor-not-allowed', !hasPending);
+  }
 
   // Update Summary Metrics
   if (metricsEl) {
@@ -2426,7 +2632,7 @@ function renderApprovals() {
       .filter((i) => i.type === 'INCOME')
       .reduce((sum, i) => sum + i.amount, 0);
     const pendingExpenseAmt = pendingItems
-      .filter((i) => i.type === 'EXPENSE')
+      .filter((i) => i.type === 'EXPENSE' || i.type === 'PAYOUT')
       .reduce((sum, i) => sum + i.amount, 0);
     const pendingTaskCount = pendingItems.filter((i) => i.type === 'TASK').length;
 
@@ -2442,14 +2648,14 @@ function renderApprovals() {
         <div class="text-[10px] text-slate-400 mt-1">Verified deals awaiting clearance</div>
       </div>
       <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-        <span class="text-[11px] text-slate-500 font-medium">Pending Expenses & Payouts</span>
+        <span class="text-[11px] text-slate-500 font-medium">Pending Expenses &amp; Payouts</span>
         <div class="text-xl font-black text-rose-600 dark:text-rose-400 mt-1">${formatINR(pendingExpenseAmt)}</div>
         <div class="text-[10px] text-slate-400 mt-1">Outflow claims awaiting review</div>
       </div>
       <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
         <span class="text-[11px] text-slate-500 font-medium">Pending Work Deliverables</span>
         <div class="text-xl font-black text-purple-600 dark:text-purple-400 mt-1">${pendingTaskCount} Tasks</div>
-        <div class="text-[10px] text-purple-500 mt-1">Submitted by Arshad & Vivek</div>
+        <div class="text-[10px] text-purple-500 mt-1">Submitted by team members</div>
       </div>
     `;
   }
@@ -2469,114 +2675,197 @@ function renderApprovals() {
         </td>
       </tr>
     `;
-    return;
-  }
-
-  tableBody.innerHTML = visibleItems
-    .map(
-      (item) => `
+  } else {
+    tableBody.innerHTML = visibleItems
+      .map((item) => {
+        const itemId = safeId(item.id);
+        const rType = safeId(item.rawType);
+        return `
       <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition">
         <td class="py-3 px-3">
-          <span class="px-2 py-0.5 rounded text-[10px] font-bold ${item.badgeClass}">${item.type}</span>
+          <span class="px-2 py-0.5 rounded text-[10px] font-bold ${item.badgeClass}">${escapeHtml(item.type)}</span>
         </td>
         <td class="py-3 px-3">
-          <div class="font-bold text-slate-900 dark:text-white">${item.title}</div>
-          <div class="text-[11px] text-slate-500">${item.purpose}</div>
+          <div class="font-bold text-slate-900 dark:text-white">${escapeHtml(item.title)}</div>
+          <div class="text-[11px] text-slate-500">${escapeHtml(item.purpose)}</div>
         </td>
-        <td class="py-3 px-3 font-medium text-slate-700 dark:text-slate-300">${item.submittedBy}</td>
+        <td class="py-3 px-3 font-medium text-slate-700 dark:text-slate-300">${escapeHtml(item.submittedBy)}</td>
         <td class="py-3 px-3">
-          <span class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono text-[10px]">${item.project}</span>
+          <span class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono text-[10px]">${escapeHtml(item.project)}</span>
         </td>
-        <td class="py-3 px-3 text-right font-bold text-slate-900 dark:text-white">${item.scopeDisplay}</td>
-        <td class="py-3 px-3 font-mono text-slate-500 text-[11px]">${item.date}</td>
+        <td class="py-3 px-3 text-right font-bold text-slate-900 dark:text-white">${escapeHtml(item.scopeDisplay)}</td>
+        <td class="py-3 px-3 font-mono text-slate-500 text-[11px]">${escapeHtml(item.date)}</td>
         <td class="py-3 px-3 text-center">
           <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
             <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-            ${item.statusLabel}
+            ${escapeHtml(item.statusLabel)}
           </span>
         </td>
         <td class="py-3 px-3 text-right whitespace-nowrap">
-          <button onclick="approveApprovalItem('${item.rawType}', '${item.id}')"
-            class="px-2.5 py-1 rounded-lg bg-[#026047] hover:bg-[#024d39] text-[#fffde8] font-bold text-[11px] transition inline-flex items-center gap-1 shadow-sm">
-            <span>👑</span> Approve
-          </button>
+          <div class="inline-flex items-center gap-1.5">
+            <button onclick="approveApprovalItem('${rType}', '${itemId}')"
+              class="px-2.5 py-1 rounded-lg bg-[#026047] hover:bg-[#024d39] text-[#fffde8] font-bold text-[11px] transition inline-flex items-center gap-1 shadow-sm">
+              <span>👑</span> Approve
+            </button>
+            <button onclick="rejectApprovalItem('${rType}', '${itemId}')"
+              class="px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 font-bold text-[11px] transition inline-flex items-center"
+              title="${item.rawType === 'task' ? 'Return to In Progress' : 'Reject Request'}">
+              ${item.rawType === 'task' ? '↺ Return' : '✕ Reject'}
+            </button>
+          </div>
         </td>
       </tr>
-    `
-    )
-    .join('') + renderLeadPipelineSection();
+    `;
+      })
+      .join('');
+  }
+
+  if (leadPipeEl) {
+    leadPipeEl.innerHTML = renderLeadPipelineSection();
+  }
 }
 window.renderApprovals = renderApprovals;
 
-function approveApprovalItem(type, id) {
-  if (STATE.activeRole !== 'pranav') {
-    showToast('Permission Denied: Only Founder & Director Pranav Bansode can sign off approvals.');
-    return;
+function completeTaskRecord(task) {
+  task.status = 'completed';
+  task.completedDate = new Date().toISOString().split('T')[0];
+  task.approvedBy = 'Pranav Bansode (Founder)';
+
+  const sb = getSupabaseClient();
+  if (sb && task.id && task.id.includes('-') && !task.id.startsWith('task-')) {
+    sb.from('assigned_tasks')
+      .update({ status: 'completed', completed_at: new Date().toISOString() })
+      .eq('id', task.id)
+      .then(({ error }) => {
+        if (error) console.warn('Supabase task completion sync note:', error.message);
+      });
   }
+}
+
+function approveApprovalItem(type, id) {
+  if (!requireFounder('sign off approvals')) return;
 
   if (type === 'income') {
     const item = (STATE.income || []).find((i) => i.id === id);
-    if (item) {
-      item.status = 'received';
-      item.approvedBy = 'Pranav Bansode (Founder)';
-      item.approvedDate = new Date().toISOString().split('T')[0];
-      STATE.auditLogs.unshift({
-        id: 'log-' + Date.now(),
-        action: 'INCOME_VERIFIED',
-        details: `Founder approved client inflow ₹${item.amount.toLocaleString('en-IN')} from ${item.client} for ${item.projectName || item.project}`,
-        performedBy: 'Pranav Bansode (Founder / Director)',
-        date: new Date().toISOString().replace('T', ' ').slice(0, 16),
-      });
-      showToast(`Approved: ${item.client} inflow of ${formatINR(item.amount)} verified!`);
-    }
+    if (!item || item.status === 'received') return;
+
+    item.status = 'received';
+    item.approvedBy = 'Pranav Bansode (Founder / Director)';
+    item.approvedDate = new Date().toISOString().split('T')[0];
+    item.approvedAt = new Date().toISOString().replace('T', ' ').slice(0, 16);
+
+    const prj = (STATE.projects || []).find((p) => p.id === item.projectId);
+    if (prj) prj.revenueReceived = (prj.revenueReceived || 0) + (Number(item.amount) || 0);
+
+    recordAuditLog(
+      'INCOME_VERIFIED',
+      `Founder approved client inflow ₹${(Number(item.amount) || 0).toLocaleString('en-IN')} from ${item.clientName} for ${item.projectName || item.projectId}`,
+      'Pranav Bansode (Founder / Director)'
+    );
+    saveAppStateToStorage();
+    showToast(`Approved: ${item.clientName} inflow of ${formatINR(item.amount)} verified!`);
   } else if (type === 'expense') {
     const item = (STATE.expenses || []).find((e) => e.id === id);
-    if (item) {
-      item.status = 'approved';
-      item.approvedBy = 'Pranav Bansode (Founder)';
-      item.approvedDate = new Date().toISOString().split('T')[0];
-      STATE.auditLogs.unshift({
-        id: 'log-' + Date.now(),
-        action: 'EXPENSE_APPROVED',
-        details: `Founder approved expense ₹${item.amount.toLocaleString('en-IN')} for ${item.title}`,
-        performedBy: 'Pranav Bansode (Founder / Director)',
-        date: new Date().toISOString().replace('T', ' ').slice(0, 16),
-      });
-      showToast(`Approved: Expense ${formatINR(item.amount)} approved!`);
+    if (!item || item.status === 'approved') return;
+
+    item.status = 'approved';
+    item.approvedBy = 'Pranav Bansode (Founder / Director)';
+    item.approvedDate = new Date().toISOString().split('T')[0];
+
+    if (item.projectId) {
+      const prj = (STATE.projects || []).find((p) => p.id === item.projectId);
+      if (prj) prj.directExpenses = (prj.directExpenses || 0) + (Number(item.amount) || 0);
     }
+
+    recordAuditLog(
+      'EXPENSE_APPROVED',
+      `Founder approved expense ₹${(Number(item.amount) || 0).toLocaleString('en-IN')} for ${item.title}`,
+      'Pranav Bansode (Founder / Director)'
+    );
+    saveAppStateToStorage();
+    showToast(`Approved: Expense ${formatINR(item.amount)} approved!`);
   } else if (type === 'payout') {
-    if (typeof recordCompensationPayout === 'function') {
-      recordCompensationPayout(id);
+    if (typeof window.recordCompensationPayout === 'function') {
+      window.recordCompensationPayout(id);
       return;
     }
   } else if (type === 'task') {
     const task = (STATE.assignedTasks || []).find((t) => t.id === id);
-    if (task) {
-      task.status = 'completed';
-      task.completedDate = new Date().toISOString().split('T')[0];
-      task.approvedBy = 'Pranav Bansode (Founder)';
-      STATE.auditLogs.unshift({
-        id: 'log-' + Date.now(),
-        action: 'DELIVERABLE_APPROVED',
-        details: `Founder approved deliverable: ${task.title} completed by ${task.assignedToName}`,
-        performedBy: 'Pranav Bansode (Founder / Director)',
-        date: new Date().toISOString().replace('T', ' ').slice(0, 16),
-      });
-      saveAssignedTasksToStorage();
-      showToast(`Approved: Deliverable "${task.title}" verified and completed!`);
-    }
+    if (!task || task.status === 'completed') return;
+
+    completeTaskRecord(task);
+    recordAuditLog(
+      'DELIVERABLE_APPROVED',
+      `Founder approved deliverable: ${task.title} completed by ${task.assignedToName}`,
+      'Pranav Bansode (Founder / Director)'
+    );
+    saveAssignedTasksToStorage();
+    saveAppStateToStorage();
+    showToast(`Approved: Deliverable "${task.title}" verified and completed!`);
   }
 
   renderApprovals();
+  renderFounderDashboard();
+  renderProjects();
+  renderReports();
   renderSidebarNav(STATE.currentTab);
 }
 window.approveApprovalItem = approveApprovalItem;
 
-function approveAllPendingRequests() {
-  if (STATE.activeRole !== 'pranav') {
-    showToast('Permission Denied: Only Founder & Director Pranav Bansode can sign off approvals.');
+function rejectApprovalItem(type, id) {
+  if (!requireFounder('reject pending requests')) return;
+
+  if (type === 'income') {
+    window.rejectIncome(id);
     return;
+  } else if (type === 'expense') {
+    window.rejectExpense(id);
+    return;
+  } else if (type === 'payout') {
+    const mem = (STATE.team || []).find((m) => m.id === id);
+    if (!mem || !mem.pendingCompensation) return;
+    const prevAmt = mem.pendingCompensation;
+    mem.pendingCompensation = 0;
+    recordAuditLog(
+      'COMPENSATION_CANCELLED',
+      `Founder cancelled queued compensation payout of ${formatINR(prevAmt)} for ${mem.name}`,
+      'Pranav Bansode (Founder / Director)'
+    );
+    saveAppStateToStorage();
+    showToast(`Cleared queued payout for ${mem.name}.`);
+  } else if (type === 'task') {
+    const task = (STATE.assignedTasks || []).find((t) => t.id === id);
+    if (!task || task.status !== 'review_pending') return;
+    task.status = 'in_progress';
+    saveAssignedTasksToStorage();
+
+    const sb = getSupabaseClient();
+    if (sb && task.id && task.id.includes('-') && !task.id.startsWith('task-')) {
+      sb.from('assigned_tasks')
+        .update({ status: 'in_progress', completed_at: null })
+        .eq('id', task.id)
+        .then(({ error }) => {
+          if (error) console.warn('Supabase task return sync note:', error.message);
+        });
+    }
+
+    recordAuditLog(
+      'DELIVERABLE_RETURNED',
+      `Founder returned deliverable "${task.title}" to ${task.assignedToName} for revisions.`,
+      'Pranav Bansode (Founder / Director)'
+    );
+    saveAppStateToStorage();
+    showToast(`Returned "${task.title}" to ${task.assignedToName} for revisions.`);
   }
+
+  renderApprovals();
+  renderFounderDashboard();
+  renderSidebarNav(STATE.currentTab);
+}
+window.rejectApprovalItem = rejectApprovalItem;
+
+function approveAllPendingRequests() {
+  if (!requireFounder('batch approve pending requests')) return;
 
   let count = 0;
 
@@ -2584,8 +2873,11 @@ function approveAllPendingRequests() {
   (STATE.income || []).forEach((i) => {
     if (i.status === 'pending_approval') {
       i.status = 'received';
-      i.approvedBy = 'Pranav Bansode (Founder)';
+      i.approvedBy = 'Pranav Bansode (Founder / Director)';
       i.approvedDate = new Date().toISOString().split('T')[0];
+      i.approvedAt = new Date().toISOString().replace('T', ' ').slice(0, 16);
+      const prj = (STATE.projects || []).find((p) => p.id === i.projectId);
+      if (prj) prj.revenueReceived = (prj.revenueReceived || 0) + (Number(i.amount) || 0);
       count++;
     }
   });
@@ -2594,8 +2886,12 @@ function approveAllPendingRequests() {
   (STATE.expenses || []).forEach((e) => {
     if (e.status === 'pending_approval') {
       e.status = 'approved';
-      e.approvedBy = 'Pranav Bansode (Founder)';
+      e.approvedBy = 'Pranav Bansode (Founder / Director)';
       e.approvedDate = new Date().toISOString().split('T')[0];
+      if (e.projectId) {
+        const prj = (STATE.projects || []).find((p) => p.id === e.projectId);
+        if (prj) prj.directExpenses = (prj.directExpenses || 0) + (Number(e.amount) || 0);
+      }
       count++;
     }
   });
@@ -2625,28 +2921,28 @@ function approveAllPendingRequests() {
   // 4. Tasks
   (STATE.assignedTasks || []).forEach((t) => {
     if (t.status === 'review_pending') {
-      t.status = 'completed';
-      t.completedDate = new Date().toISOString().split('T')[0];
-      t.approvedBy = 'Pranav Bansode (Founder)';
+      completeTaskRecord(t);
       count++;
     }
   });
 
   if (count > 0) {
     saveAssignedTasksToStorage();
-    STATE.auditLogs.unshift({
-      id: 'log-' + Date.now(),
-      action: 'BATCH_APPROVAL',
-      details: `Founder Pranav Bansode batch approved ${count} pending corporate requests across inflows, expenses, comp and tasks in one row.`,
-      performedBy: 'Pranav Bansode (Founder / Director)',
-      date: new Date().toISOString().replace('T', ' ').slice(0, 16),
-    });
-    showToast(`⚡ Success: All ${count} pending requests approved in one row!`);
+    recordAuditLog(
+      'BATCH_APPROVAL',
+      `Founder Pranav Bansode batch approved ${count} pending corporate requests across inflows, expenses, comp and tasks.`,
+      'Pranav Bansode (Founder / Director)'
+    );
+    saveAppStateToStorage();
+    showToast(`⚡ Success: All ${count} pending requests approved!`);
   } else {
     showToast('No pending approval requests to clear.');
   }
 
   renderApprovals();
+  renderFounderDashboard();
+  renderProjects();
+  renderReports();
   renderSidebarNav(STATE.currentTab);
 }
 window.approveAllPendingRequests = approveAllPendingRequests;
@@ -2655,9 +2951,17 @@ window.approveAllPendingRequests = approveAllPendingRequests;
 // ASSIGN PROJECTS (FOUNDER VIEW - PRANAV BANSODE)
 // Delegate project scopes, milestones and tasks to Arshad Shaikh & Vivek Gajdhane
 // ==============================================================================
+function getInitials(name, fallback = 'TM') {
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return fallback;
+}
+
 function renderAssignProjects() {
   const metricsEl = document.getElementById('assign-projects-metrics-container');
   const container = document.getElementById('assign-projects-container');
+  const leadPipeEl = document.getElementById('assign-lead-pipeline');
   if (!container) return;
 
   const memberFilter = document.getElementById('task-member-filter')?.value || 'ALL';
@@ -2676,7 +2980,7 @@ function renderAssignProjects() {
       <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
         <span class="text-[11px] text-slate-500 font-medium">Total Delegated Work</span>
         <div class="text-xl font-black text-slate-900 dark:text-white mt-1">${totalCount} Tasks</div>
-        <div class="text-[10px] text-slate-400 mt-1">LeadX & Smart Review</div>
+        <div class="text-[10px] text-slate-400 mt-1">LeadX &amp; Smart Review</div>
       </div>
       <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
         <span class="text-[11px] text-slate-500 font-medium">In Progress</span>
@@ -2689,7 +2993,7 @@ function renderAssignProjects() {
         <div class="text-[10px] text-amber-500 mt-1">Pending Founder Approval</div>
       </div>
       <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-        <span class="text-[11px] text-slate-500 font-medium">Completed & Verified</span>
+        <span class="text-[11px] text-slate-500 font-medium">Completed &amp; Verified</span>
         <div class="text-xl font-black text-[#026047] dark:text-emerald-400 mt-1">${completedCount} Tasks</div>
         <div class="text-[10px] text-emerald-600 mt-1">100% Quality checked</div>
       </div>
@@ -2713,92 +3017,99 @@ function renderAssignProjects() {
         <p class="text-xs text-slate-400 mt-1">Click "+ Assign New Project / Task" above to delegate new deliverables to team members.</p>
       </div>
     `;
-    return;
+  } else {
+    container.innerHTML = filtered
+      .map((task) => {
+        const tId = safeId(task.id);
+        let priorityClass = 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300';
+        if (task.priority === 'urgent')
+          priorityClass = 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300';
+        else if (task.priority === 'high')
+          priorityClass = 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300';
+
+        let statusBadge = `
+          <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+            <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span> Assigned
+          </span>
+        `;
+        if (task.status === 'in_progress') {
+          statusBadge = `
+            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span> In Progress
+            </span>
+          `;
+        } else if (task.status === 'review_pending') {
+          statusBadge = `
+            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+              <span class="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse"></span> Review Pending
+            </span>
+          `;
+        } else if (task.status === 'completed') {
+          statusBadge = `
+            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+              <span>✅</span> Completed &amp; Verified
+            </span>
+          `;
+        }
+
+        const initials = getInitials(task.assignedToName, task.assignedTo === 'mem-02' ? 'AS' : 'VG');
+
+        return `
+        <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-2.5">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${priorityClass}">${escapeHtml(task.priority)}</span>
+              <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold">${escapeHtml(task.projectName)}</span>
+              <span class="text-[11px] text-slate-400">Assigned: ${escapeHtml(task.assignedDate)}</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-[11px] text-slate-500">Due: <strong class="text-slate-900 dark:text-white">${escapeHtml(task.dueDate)}</strong></span>
+              <button onclick="deleteAssignedTask('${tId}')" class="p-1 rounded text-slate-400 hover:text-rose-600 transition" title="Delete Task">
+                🗑️
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <h4 class="font-bold text-sm text-slate-900 dark:text-white">${escapeHtml(task.title)}</h4>
+            <p class="text-xs text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">${escapeHtml(task.description)}</p>
+          </div>
+
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
+            <div class="flex items-center gap-2">
+              <div class="w-6 h-6 rounded-full bg-[#026047] text-[#fffde8] flex items-center justify-center font-bold text-[10px]">
+                ${escapeHtml(initials)}
+              </div>
+              <div>
+                <span class="text-slate-500">Assigned To:</span>
+                <strong class="text-slate-900 dark:text-white ml-1">${escapeHtml(task.assignedToName)}</strong>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              ${statusBadge}
+              ${
+                task.status === 'review_pending'
+                  ? `<button onclick="approveApprovalItem('task', '${tId}')" class="px-2.5 py-1 rounded-lg bg-[#026047] hover:bg-[#024d39] text-[#fffde8] font-bold text-xs transition inline-flex items-center gap-1 shadow-sm">
+                      <span>👑</span> Approve Deliverable
+                    </button>`
+                  : ''
+              }
+            </div>
+          </div>
+        </div>
+      `;
+      })
+      .join('');
   }
 
-  container.innerHTML = filtered
-    .map((task) => {
-      let priorityClass = 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300';
-      if (task.priority === 'urgent')
-        priorityClass = 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300';
-      else if (task.priority === 'high')
-        priorityClass = 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300';
-
-      let statusBadge = `
-        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-          <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span> Assigned
-        </span>
-      `;
-      if (task.status === 'in_progress') {
-        statusBadge = `
-          <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-            <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span> In Progress
-          </span>
-        `;
-      } else if (task.status === 'review_pending') {
-        statusBadge = `
-          <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
-            <span class="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse"></span> Review Pending
-          </span>
-        `;
-      } else if (task.status === 'completed') {
-        statusBadge = `
-          <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-            <span>✅</span> Completed & Verified
-          </span>
-        `;
-      }
-
-      return `
-      <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-2.5">
-          <div class="flex items-center gap-2">
-            <span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${priorityClass}">${task.priority}</span>
-            <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold">${task.projectName}</span>
-            <span class="text-[11px] text-slate-400">Assigned: ${task.assignedDate}</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <span class="text-[11px] text-slate-500">Due: <strong class="text-slate-900 dark:text-white">${task.dueDate}</strong></span>
-            <button onclick="deleteAssignedTask('${task.id}')" class="p-1 rounded text-slate-400 hover:text-rose-600 transition" title="Delete Task">
-              🗑️
-            </button>
-          </div>
-        </div>
-
-        <div>
-          <h4 class="font-bold text-sm text-slate-900 dark:text-white">${task.title}</h4>
-          <p class="text-xs text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">${task.description}</p>
-        </div>
-
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
-          <div class="flex items-center gap-2">
-            <div class="w-6 h-6 rounded-full bg-[#026047] text-[#fffde8] flex items-center justify-center font-bold text-[10px]">
-              ${task.assignedTo === 'mem-02' ? 'AS' : 'VG'}
-            </div>
-            <div>
-              <span class="text-slate-500">Assigned To:</span>
-              <strong class="text-slate-900 dark:text-white ml-1">${task.assignedToName}</strong>
-            </div>
-          </div>
-          <div class="flex items-center gap-2">
-            ${statusBadge}
-            ${
-              task.status === 'review_pending'
-                ? `<button onclick="approveApprovalItem('task', '${task.id}')" class="px-2.5 py-1 rounded-lg bg-[#026047] hover:bg-[#024d39] text-[#fffde8] font-bold text-xs transition inline-flex items-center gap-1 shadow-sm">
-                    <span>👑</span> Approve Deliverable
-                  </button>`
-                : ''
-            }
-          </div>
-        </div>
-      </div>
-    `;
-    })
-    .join('') + renderLeadPipelineSection();
+  if (leadPipeEl) {
+    leadPipeEl.innerHTML = renderLeadPipelineSection();
+  }
 }
 window.renderAssignProjects = renderAssignProjects;
 
 function openAssignTaskModal() {
+  if (!requireFounder('delegate project tasks')) return;
   const modal = document.getElementById('modal-assign-task');
   if (modal) {
     modal.classList.remove('hidden');
@@ -2819,6 +3130,7 @@ function closeAssignTaskModal() {
 window.closeAssignTaskModal = closeAssignTaskModal;
 
 function submitAssignTask() {
+  if (!requireFounder('assign deliverables to team members')) return;
   const title = document.getElementById('task-title')?.value.trim();
   const assignedTo = document.getElementById('task-assigned-to')?.value;
   const project = document.getElementById('task-project')?.value;
@@ -2831,24 +3143,19 @@ function submitAssignTask() {
     return;
   }
 
-  const assignedToName =
-    assignedTo === 'mem-02' ? 'Arshad Shaikh' : 'Vivek Gajdhane';
-  const projectName =
-    project === 'prj-leadx'
-      ? 'LeadX'
-      : project === 'prj-srm'
-      ? 'Smart Review Management'
-      : 'General Operations';
+  const assignedToName = MEMBER_NAME_MAP[assignedTo] || 'Vivek Gajdhane';
+  const prjObj = (STATE.projects || []).find((p) => p.id === project);
+  const projectName = prjObj ? prjObj.name : 'General Operations';
 
   const newTask = {
     id: 'task-' + Date.now(),
-    title: title,
-    assignedTo: assignedTo,
-    assignedToName: assignedToName,
+    title,
+    assignedTo,
+    assignedToName,
     projectId: project,
-    projectName: projectName,
-    priority: priority,
-    dueDate: dueDate,
+    projectName,
+    priority,
+    dueDate,
     assignedDate: new Date().toISOString().split('T')[0],
     assignedBy: 'Pranav Bansode (Founder)',
     description: desc,
@@ -2857,47 +3164,43 @@ function submitAssignTask() {
 
   STATE.assignedTasks.unshift(newTask);
 
-  // Sync insert to Supabase assigned_tasks table
+  // Sync insert to Supabase assigned_tasks table if UUID mapped
   const sb = getSupabaseClient();
-  if (sb) {
-    const targetMemberUuid = MEMBER_UUID_MAP[assignedTo] || '00000000-0000-4000-8000-000000000002';
+  if (sb && MEMBER_UUID_MAP[assignedTo]) {
+    const targetMemberUuid = MEMBER_UUID_MAP[assignedTo];
     const targetProjectUuid = PROJECT_UUID_MAP[project] || null;
 
     sb.from('assigned_tasks')
       .insert({
-        title: title,
+        title,
         description: desc || '',
         assigned_to: targetMemberUuid,
         project_id: targetProjectUuid,
         priority: priority || 'medium',
         status: 'assigned',
-        due_date: dueDate || null
+        due_date: dueDate || null,
       })
       .select()
       .single()
       .then(({ data, error }) => {
         if (error) {
-          console.error('Supabase task insert error:', error.message);
-          showToast(`⚠ Saved locally, but Supabase rejected write: ${error.message}`);
-        } else if (data) {
-          console.log('Task saved to Supabase DB, assigned_tasks ID:', data.id);
+          console.warn('Supabase task insert note:', error.message);
+        } else if (data && data.id) {
           newTask.id = data.id;
-          showToast(`✅ Task successfully saved & synced to Supabase database!`);
+          saveAssignedTasksToStorage();
         }
       });
   }
 
-  STATE.auditLogs.unshift({
-    id: 'log-' + Date.now(),
-    action: 'TASK_ASSIGNED',
-    details: `Founder assigned deliverable "${title}" to ${assignedToName} (${projectName})`,
-    performedBy: 'Pranav Bansode (Founder / Director)',
-    date: new Date().toISOString().replace('T', ' ').slice(0, 16),
-  });
+  recordAuditLog(
+    'TASK_ASSIGNED',
+    `Founder assigned deliverable "${title}" to ${assignedToName} (${projectName})`,
+    'Pranav Bansode (Founder / Director)'
+  );
+  saveAssignedTasksToStorage();
+  saveAppStateToStorage();
 
   closeAssignTaskModal();
-
-  // Reset form inputs
   const titleInput = document.getElementById('task-title');
   if (titleInput) titleInput.value = '';
   const descInput = document.getElementById('task-desc');
@@ -2905,17 +3208,16 @@ function submitAssignTask() {
 
   renderAssignProjects();
   renderSidebarNav(STATE.currentTab);
-  saveAssignedTasksToStorage();
   showToast(`Deliverable successfully assigned to ${assignedToName}!`);
 }
 window.submitAssignTask = submitAssignTask;
 
 function deleteAssignedTask(id) {
+  if (!requireFounder('remove delegated tasks')) return;
   if (!confirm('Are you sure you want to remove this delegated task?')) return;
   STATE.assignedTasks = (STATE.assignedTasks || []).filter((t) => t.id !== id);
   saveAssignedTasksToStorage();
 
-  // Sync deletion to Supabase
   const sb = getSupabaseClient();
   if (sb && id && id.includes('-') && !id.startsWith('task-')) {
     sb.from('assigned_tasks').delete().eq('id', id).then(({ error }) => {
@@ -2930,37 +3232,36 @@ function deleteAssignedTask(id) {
 window.deleteAssignedTask = deleteAssignedTask;
 
 // ==============================================================================
-// ALLOCATED WORK (EMPLOYEE VIEW - ARSHAD SHAIKH & VIVEK GAJDHANE)
-// View tasks assigned by Founder Pranav Bansode & submit for director clearance
+// ALLOCATED WORK (EMPLOYEE VIEW - ARSHAD SHAIKH, VIVEK GAJDHANE, ARYAN BHORE)
 // ==============================================================================
 function renderAllocatedWork() {
   const sessionPill = document.getElementById('allocated-work-session-pill');
   const metricsEl = document.getElementById('allocated-work-metrics');
   const container = document.getElementById('allocated-work-container');
+  const leadPipeEl = document.getElementById('allocated-lead-pipeline');
   if (!container) return;
 
   const currentRole = STATE.activeRole || 'arshad';
-  const currentMemberId = currentRole === 'arshad' ? 'mem-02' : (currentRole === 'aryan' ? 'mem-04' : 'mem-03');
-  const currentMember =
-    (STATE.team || []).find((m) => m.id === currentMemberId) || {
-      name: currentRole === 'arshad' ? 'Arshad Shaikh' : (currentRole === 'aryan' ? 'Aryan Bhore' : 'Vivek Gajdhane'),
-      designation: currentRole === 'arshad' ? 'Co-Founder / Marketing' : (currentRole === 'aryan' ? 'Research Lead' : 'Engineering & Architecture'),
-    };
-  const displayRole = currentMember.designation || currentMember.role || (currentRole === 'aryan' ? 'Research Lead' : 'Technical Department');
+  const currentMemberId = getCurrentMemberId();
+  const currentMember = (STATE.team || []).find((m) => m.id === currentMemberId) || {
+    name: MEMBER_NAME_MAP[currentMemberId] || 'Team Member',
+    designation: 'Team Department',
+  };
+  const displayRole =
+    currentMember.designation ||
+    currentMember.role ||
+    (currentRole === 'aryan' ? 'Research Lead' : 'Technical Department');
 
   if (sessionPill) {
     sessionPill.innerHTML = `
       <span>Allocated To: </span>
-      <strong class="text-slate-900 dark:text-white font-black">${currentMember.name}</strong>
-      <span class="text-[10px] text-slate-500 ml-1">(${displayRole})</span>
+      <strong class="text-slate-900 dark:text-white font-black">${escapeHtml(currentMember.name)}</strong>
+      <span class="text-[10px] text-slate-500 ml-1">(${escapeHtml(displayRole)})</span>
     `;
   }
 
-  const myTasks = (STATE.assignedTasks || []).filter(
-    (t) => t.assignedTo === currentMemberId
-  );
+  const myTasks = (STATE.assignedTasks || []).filter((t) => t.assignedTo === currentMemberId);
 
-  // Update Metrics
   if (metricsEl) {
     const totalCount = myTasks.length;
     const inProgCount = myTasks.filter((t) => t.status === 'in_progress').length;
@@ -2984,7 +3285,7 @@ function renderAllocatedWork() {
         <div class="text-[10px] text-amber-500 mt-1">Awaiting Founder clearance</div>
       </div>
       <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-        <span class="text-[11px] text-slate-500 font-medium">Approved & Verified</span>
+        <span class="text-[11px] text-slate-500 font-medium">Approved &amp; Verified</span>
         <div class="text-xl font-black text-[#026047] dark:text-emerald-400 mt-1">${completedCount} Tasks</div>
         <div class="text-[10px] text-emerald-600 mt-1">Founder Sign-off Granted</div>
       </div>
@@ -2999,98 +3300,119 @@ function renderAllocatedWork() {
         <p class="text-xs text-slate-400 mt-1">You are all caught up! Work delegated to you by Founder Pranav Bansode will appear here automatically.</p>
       </div>
     `;
-    return;
+  } else {
+    container.innerHTML = myTasks
+      .map((task) => {
+        const tId = safeId(task.id);
+        let priorityClass = 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300';
+        if (task.priority === 'urgent')
+          priorityClass = 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300';
+        else if (task.priority === 'high')
+          priorityClass = 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300';
+
+        let actionControl = '';
+        if (task.status === 'assigned') {
+          actionControl = `
+            <button onclick="updateTaskStatus('${tId}', 'in_progress')"
+              class="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition flex items-center gap-1.5 shadow-sm">
+              <span>▶️</span> Start Work
+            </button>
+          `;
+        } else if (task.status === 'in_progress') {
+          actionControl = `
+            <button onclick="updateTaskStatus('${tId}', 'review_pending')"
+              class="px-3.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition flex items-center gap-1.5 shadow-sm">
+              <span>📤</span> Submit for Founder Approval
+            </button>
+          `;
+        } else if (task.status === 'review_pending') {
+          actionControl = `
+            <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-50 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 font-bold text-xs">
+              <span class="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></span>
+              <span>⏳ Awaiting Founder Pranav's Approval</span>
+            </div>
+          `;
+        } else if (task.status === 'completed') {
+          actionControl = `
+            <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 font-bold text-xs">
+              <span>✅</span> Completed &amp; Verified by Director
+            </div>
+          `;
+        }
+
+        return `
+        <div class="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3.5">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${priorityClass}">${escapeHtml(task.priority)}</span>
+              <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold">${escapeHtml(task.projectName)}</span>
+              <span class="text-[11px] text-slate-400">Assigned: ${escapeHtml(task.assignedDate)}</span>
+            </div>
+            <div class="text-[11px] text-slate-500">
+              Target Due Date: <strong class="text-slate-900 dark:text-white font-bold">${escapeHtml(task.dueDate)}</strong>
+            </div>
+          </div>
+
+          <div>
+            <h4 class="font-bold text-sm text-slate-900 dark:text-white">${escapeHtml(task.title)}</h4>
+            <div class="mt-2 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+              <div class="font-bold text-[11px] text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Founder's Instructions:</div>
+              ${escapeHtml(task.description)}
+            </div>
+          </div>
+
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 text-xs">
+            <div class="flex items-center gap-2 text-slate-500">
+              <span>Delegated By:</span>
+              <span class="px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950 text-[#026047] dark:text-emerald-300 font-bold text-[11px]">👑 Pranav Bansode (Founder)</span>
+            </div>
+            <div>
+              ${actionControl}
+            </div>
+          </div>
+        </div>
+      `;
+      })
+      .join('');
   }
 
-  container.innerHTML = myTasks
-    .map((task) => {
-      let priorityClass = 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300';
-      if (task.priority === 'urgent')
-        priorityClass = 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300';
-      else if (task.priority === 'high')
-        priorityClass = 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300';
-
-      let actionControl = '';
-      if (task.status === 'assigned') {
-        actionControl = `
-          <button onclick="updateTaskStatus('${task.id}', 'in_progress')"
-            class="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition flex items-center gap-1.5 shadow-sm">
-            <span>▶️</span> Start Work
-          </button>
-        `;
-      } else if (task.status === 'in_progress') {
-        actionControl = `
-          <button onclick="updateTaskStatus('${task.id}', 'review_pending')"
-            class="px-3.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition flex items-center gap-1.5 shadow-sm">
-            <span>📤</span> Submit for Founder Approval
-          </button>
-        `;
-      } else if (task.status === 'review_pending') {
-        actionControl = `
-          <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-50 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 font-bold text-xs">
-            <span class="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></span>
-            <span>⏳ Awaiting Founder Pranav's Approval</span>
-          </div>
-        `;
-      } else if (task.status === 'completed') {
-        actionControl = `
-          <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 font-bold text-xs">
-            <span>✅</span> Completed & Verified by Director
-          </div>
-        `;
-      }
-
-      return `
-      <div class="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3.5">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
-          <div class="flex items-center gap-2">
-            <span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${priorityClass}">${task.priority}</span>
-            <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold">${task.projectName}</span>
-            <span class="text-[11px] text-slate-400">Assigned: ${task.assignedDate}</span>
-          </div>
-          <div class="text-[11px] text-slate-500">
-            Target Due Date: <strong class="text-slate-900 dark:text-white font-bold">${task.dueDate}</strong>
-          </div>
-        </div>
-
-        <div>
-          <h4 class="font-bold text-sm text-slate-900 dark:text-white">${task.title}</h4>
-          <div class="mt-2 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
-            <div class="font-bold text-[11px] text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Founder's Instructions:</div>
-            ${task.description}
-          </div>
-        </div>
-
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 text-xs">
-          <div class="flex items-center gap-2 text-slate-500">
-            <span>Delegated By:</span>
-            <span class="px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950 text-[#026047] dark:text-emerald-300 font-bold text-[11px]">👑 Pranav Bansode (Founder)</span>
-          </div>
-          <div>
-            ${actionControl}
-          </div>
-        </div>
-      </div>
-    `;
-    })
-    .join('') + renderLeadPipelineSection();
+  if (leadPipeEl) {
+    leadPipeEl.innerHTML = renderLeadPipelineSection();
+  }
 }
 window.renderAllocatedWork = renderAllocatedWork;
 
 function updateTaskStatus(taskId, newStatus) {
+  if (!requireAuth('update task progress')) return;
   const task = (STATE.assignedTasks || []).find((t) => t.id === taskId);
   if (!task) return;
+
+  const callerMemberId = getCurrentMemberId();
+  if (STATE.activeRole !== 'pranav' && task.assignedTo !== callerMemberId) {
+    showToast('Permission Denied: You can only update tasks assigned to you.');
+    return;
+  }
+
+  const allowedTransitions = {
+    assigned: ['in_progress'],
+    in_progress: ['review_pending'],
+    review_pending: STATE.activeRole === 'pranav' ? ['completed', 'in_progress'] : [],
+    completed: [],
+  };
+  if (!(allowedTransitions[task.status] || []).includes(newStatus)) {
+    showToast('Invalid workflow transition.');
+    return;
+  }
 
   task.status = newStatus;
   saveAssignedTasksToStorage();
 
-  // Sync status update to Supabase
   const sb = getSupabaseClient();
   if (sb && task.id && task.id.includes('-') && !task.id.startsWith('task-')) {
     sb.from('assigned_tasks')
       .update({
         status: newStatus,
-        completed_at: newStatus === 'completed' ? new Date().toISOString() : null
+        completed_at: newStatus === 'completed' ? new Date().toISOString() : null,
       })
       .eq('id', task.id)
       .then(({ error }) => {
@@ -3102,16 +3424,16 @@ function updateTaskStatus(taskId, newStatus) {
     showToast(`Started work on: "${task.title}"`);
   } else if (newStatus === 'review_pending') {
     showToast(`Submitted "${task.title}" for Founder Pranav Bansode's approval!`);
-    STATE.auditLogs.unshift({
-      id: 'log-' + Date.now(),
-      action: 'DELIVERABLE_SUBMITTED',
-      details: `${task.assignedToName} submitted deliverable "${task.title}" for Founder review.`,
-      performedBy: task.assignedToName,
-      date: new Date().toISOString().replace('T', ' ').slice(0, 16),
-    });
+    recordAuditLog(
+      'DELIVERABLE_SUBMITTED',
+      `${task.assignedToName} submitted deliverable "${task.title}" for Founder review.`,
+      task.assignedToName
+    );
   }
+  saveAppStateToStorage();
 
   renderAllocatedWork();
+  if (STATE.currentTab === 'approvals') renderApprovals();
   renderSidebarNav(STATE.currentTab);
 }
 window.updateTaskStatus = updateTaskStatus;
@@ -3141,11 +3463,11 @@ function renderLeadPipelineSection() {
         <div>
           <div class="flex items-center gap-2">
             <span class="p-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-950 text-[#026047] dark:text-emerald-300 text-base">🎯</span>
-            <h3 class="text-base font-black text-slate-900 dark:text-white">Client Acquisition & 4-Step Delivery Pipeline</h3>
+            <h3 class="text-base font-black text-slate-900 dark:text-white">Client Acquisition &amp; 4-Step Delivery Pipeline</h3>
             <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#fffde8] text-[#026047] border border-[#026047]/30">4-STAGE PIPELINE</span>
           </div>
           <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            <strong>Stage 1:</strong> Aryan (Scout) ➔ <strong>Stage 2:</strong> Pranav (Allocate to Vivek) ➔ <strong>Stage 3:</strong> Vivek (Tech Dev ➔ Forward to Arshad & Notify Pranav) ➔ <strong>Stage 4:</strong> Pranav (Final Delivery Approval)
+            <strong>Stage 1:</strong> Aryan (Scout) ➔ <strong>Stage 2:</strong> Pranav (Allocate to Vivek) ➔ <strong>Stage 3:</strong> Vivek (Tech Dev ➔ Forward to Arshad &amp; Notify Pranav) ➔ <strong>Stage 4:</strong> Pranav (Final Delivery Approval)
           </p>
         </div>
         <div class="flex items-center gap-2 self-start sm:self-auto flex-wrap">
@@ -3177,7 +3499,7 @@ function renderLeadPipelineSection() {
         <div class="p-3 rounded-xl ${awaitingFinalSignoff > 0 ? 'bg-blue-50 dark:bg-blue-950/30 border border-blue-300' : 'bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800'}">
           <span class="text-[10px] text-blue-700 dark:text-blue-400 uppercase font-bold">Stage 3: Review</span>
           <div class="text-lg font-black text-blue-600 dark:text-blue-400 mt-0.5">${awaitingFinalSignoff} Pending</div>
-          <span class="text-[10px] text-blue-600 dark:text-blue-300 block mt-0.5">Arshad & Founder</span>
+          <span class="text-[10px] text-blue-600 dark:text-blue-300 block mt-0.5">Arshad &amp; Founder</span>
         </div>
         <div class="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-300">
           <span class="text-[10px] text-[#026047] dark:text-emerald-400 uppercase font-bold">Stage 4: Delivered</span>
@@ -3204,21 +3526,21 @@ function renderLeadPipelineSection() {
 }
 window.renderLeadPipelineSection = renderLeadPipelineSection;
 
-function renderSingleLeadCard(lead, currentRole) {
+function renderSingleLeadCard(rawLead, currentRole) {
+  const lead = normalizeLead(rawLead);
+  const lid = safeId(lead.id);
   const isPranav = currentRole === 'pranav';
   const isVivek = currentRole === 'vivek';
   const isArshad = currentRole === 'arshad';
-  const isAryan = currentRole === 'aryan';
 
-  // 4 Stages:
-  // 1. submitted_to_founder (Aryan -> Pranav)
-  // 2. allocated_to_vivek (Pranav -> Vivek)
-  // 3. sent_to_arshad_notified_founder (Vivek -> Arshad, Founder Notified)
-  // 4. approved_for_delivery (Founder Pranav Final Sign-off)
-
-  const s1Done = true; // submitted by Aryan
-  const s2Done = lead.status === 'allocated_to_vivek' || lead.status === 'sent_to_arshad_notified_founder' || lead.status === 'approved_for_delivery';
-  const s3Done = lead.status === 'sent_to_arshad_notified_founder' || lead.status === 'approved_for_delivery';
+  const s1Done = true;
+  const s2Done =
+    lead.status === 'allocated_to_vivek' ||
+    lead.status === 'sent_to_arshad_notified_founder' ||
+    lead.status === 'approved_for_delivery';
+  const s3Done =
+    lead.status === 'sent_to_arshad_notified_founder' ||
+    lead.status === 'approved_for_delivery';
   const s4Done = lead.status === 'approved_for_delivery';
 
   let currentStageText = 'Stage 1: Awaiting Founder Allocation';
@@ -3234,21 +3556,23 @@ function renderSingleLeadCard(lead, currentRole) {
     badgeColor = 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300';
   }
 
+  const safeDeliverable = lead.deliverableUrl ? sanitizeUrl(lead.deliverableUrl) : '';
+
   return `
     <div class="p-5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-4 hover:border-[#026047]/40 transition">
       <!-- Top Row: Lead Number, Client Name, Value & Stage Badge -->
       <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-slate-200/80 dark:border-slate-700 pb-3">
         <div class="flex items-center gap-2.5 flex-wrap">
-          <span class="px-2 py-0.5 rounded font-mono font-bold text-xs bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200">${lead.leadNumber || 'LEAD'}</span>
-          <h4 class="font-black text-sm text-slate-900 dark:text-white">${lead.clientName}</h4>
-          <span class="px-2 py-0.5 rounded text-[11px] font-semibold bg-[#fffde8] text-[#026047] border border-[#026047]/30">${lead.productType}</span>
+          <span class="px-2 py-0.5 rounded font-mono font-bold text-xs bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200">${escapeHtml(lead.leadNumber || 'LEAD')}</span>
+          <h4 class="font-black text-sm text-slate-900 dark:text-white">${escapeHtml(lead.clientName)}</h4>
+          <span class="px-2 py-0.5 rounded text-[11px] font-semibold bg-[#fffde8] text-[#026047] border border-[#026047]/30">${escapeHtml(lead.productType)}</span>
         </div>
         <div class="flex items-center gap-2">
           <span class="text-xs font-black text-[#026047] dark:text-emerald-400 bg-white dark:bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700">
             Est: ${formatINR(lead.dealValue)}
           </span>
           <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${badgeColor}">
-            ${currentStageText}
+            ${escapeHtml(currentStageText)}
           </span>
         </div>
       </div>
@@ -3256,7 +3580,6 @@ function renderSingleLeadCard(lead, currentRole) {
       <!-- 4-Step Interactive Progress Stepper Bar -->
       <div class="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
         <div class="grid grid-cols-1 sm:grid-cols-4 gap-2 text-[11px]">
-          <!-- Step 1 -->
           <div class="flex items-center gap-2 p-2 rounded-lg ${s1Done ? 'bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800' : 'bg-slate-100 opacity-60'}">
             <span class="w-5 h-5 rounded-full flex items-center justify-center font-bold text-xs ${s1Done ? 'bg-[#026047] text-white' : 'bg-slate-300 text-slate-600'}">✓</span>
             <div>
@@ -3264,7 +3587,6 @@ function renderSingleLeadCard(lead, currentRole) {
               <div class="text-[10px] text-slate-500">Lead Entered</div>
             </div>
           </div>
-          <!-- Step 2 -->
           <div class="flex items-center gap-2 p-2 rounded-lg ${s2Done ? 'bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800' : (lead.status === 'submitted_to_founder' ? 'bg-amber-50 dark:bg-amber-950/40 border border-amber-300 animate-pulse' : 'bg-slate-100 opacity-60')}">
             <span class="w-5 h-5 rounded-full flex items-center justify-center font-bold text-xs ${s2Done ? 'bg-[#026047] text-white' : 'bg-amber-500 text-white'}">
               ${s2Done ? '✓' : '2'}
@@ -3274,7 +3596,6 @@ function renderSingleLeadCard(lead, currentRole) {
               <div class="text-[10px] text-slate-500">${s2Done ? 'Assigned to Vivek' : 'Awaiting Pranav'}</div>
             </div>
           </div>
-          <!-- Step 3 -->
           <div class="flex items-center gap-2 p-2 rounded-lg ${s3Done ? 'bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800' : (lead.status === 'allocated_to_vivek' ? 'bg-purple-50 dark:bg-purple-950/40 border border-purple-300 animate-pulse' : 'bg-slate-100 opacity-60')}">
             <span class="w-5 h-5 rounded-full flex items-center justify-center font-bold text-xs ${s3Done ? 'bg-[#026047] text-white' : 'bg-purple-500 text-white'}">
               ${s3Done ? '✓' : '3'}
@@ -3284,7 +3605,6 @@ function renderSingleLeadCard(lead, currentRole) {
               <div class="text-[10px] text-slate-500">${s3Done ? 'Sent to Arshad' : 'In Dev by Vivek'}</div>
             </div>
           </div>
-          <!-- Step 4 -->
           <div class="flex items-center gap-2 p-2 rounded-lg ${s4Done ? 'bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800' : (lead.status === 'sent_to_arshad_notified_founder' ? 'bg-blue-50 dark:bg-blue-950/40 border border-blue-300 animate-pulse' : 'bg-slate-100 opacity-60')}">
             <span class="w-5 h-5 rounded-full flex items-center justify-center font-bold text-xs ${s4Done ? 'bg-[#026047] text-white' : 'bg-blue-500 text-white'}">
               ${s4Done ? '✓' : '4'}
@@ -3302,18 +3622,18 @@ function renderSingleLeadCard(lead, currentRole) {
         <div class="p-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1.5">
           <div class="flex justify-between text-slate-500">
             <span>Contact Person:</span>
-            <strong class="text-slate-900 dark:text-white">${lead.contactPerson || '—'}</strong>
+            <strong class="text-slate-900 dark:text-white">${escapeHtml(lead.contactPerson || '—')}</strong>
           </div>
           <div class="flex justify-between text-slate-500">
             <span>Phone / WhatsApp:</span>
-            <span class="font-mono text-slate-900 dark:text-white">${lead.phone || '—'}</span>
+            <span class="font-mono text-slate-900 dark:text-white">${escapeHtml(lead.phone || '—')}</span>
           </div>
           <div class="flex justify-between text-slate-500">
             <span>Lead Scouted By:</span>
-            <strong class="text-emerald-700 dark:text-emerald-400">${lead.submittedBy || 'Aryan Bhore'}</strong>
+            <strong class="text-emerald-700 dark:text-emerald-400">${escapeHtml(lead.submittedBy || 'Aryan Bhore')}</strong>
           </div>
           <p class="text-[11px] text-slate-600 dark:text-slate-400 pt-1 border-t border-slate-100 dark:border-slate-800">
-            <strong>Scope / Pain points:</strong> ${lead.requirements}
+            <strong>Scope / Pain points:</strong> ${escapeHtml(lead.requirements)}
           </p>
         </div>
 
@@ -3321,8 +3641,8 @@ function renderSingleLeadCard(lead, currentRole) {
           ${lead.founderInstructions ? `
             <div class="text-[11px]">
               <span class="font-bold text-amber-700 dark:text-amber-400">👑 Founder's Technical Scope (For Vivek):</span>
-              <p class="text-slate-700 dark:text-slate-300 mt-0.5">${lead.founderInstructions}</p>
-              <div class="text-[10px] text-slate-400 mt-1">Due Date: <strong>${lead.dueDate || '—'}</strong> • Priority: <strong>${lead.priority || 'high'}</strong></div>
+              <p class="text-slate-700 dark:text-slate-300 mt-0.5">${escapeHtml(lead.founderInstructions)}</p>
+              <div class="text-[10px] text-slate-400 mt-1">Due Date: <strong>${escapeHtml(lead.dueDate || '—')}</strong> • Priority: <strong>${escapeHtml(lead.priority || 'high')}</strong></div>
             </div>
           ` : `
             <div class="text-slate-400 text-xs italic py-2">
@@ -3333,21 +3653,26 @@ function renderSingleLeadCard(lead, currentRole) {
           ${lead.deliverableUrl ? `
             <div class="pt-2 border-t border-slate-100 dark:border-slate-800 text-[11px]">
               <span class="font-bold text-purple-700 dark:text-purple-300">💻 Vivek's Technical Deliverable:</span>
-              <div class="mt-0.5"><a href="${lead.deliverableUrl}" target="_blank" class="text-blue-600 dark:text-blue-400 font-mono underline break-all">${lead.deliverableUrl}</a></div>
-              <p class="text-slate-600 dark:text-slate-400 text-[10px] mt-0.5">${lead.techNotes || ''}</p>
+              <div class="mt-0.5">
+                ${safeDeliverable
+                  ? `<a href="${escapeHtml(safeDeliverable)}" target="_blank" rel="noopener noreferrer" class="text-blue-600 dark:text-blue-400 font-mono underline break-all">${escapeHtml(lead.deliverableUrl)}</a>`
+                  : `<span class="text-rose-600 font-mono">[Blocked unsafe URL] ${escapeHtml(lead.deliverableUrl)}</span>`
+                }
+              </div>
+              <p class="text-slate-600 dark:text-slate-400 text-[10px] mt-0.5">${escapeHtml(lead.techNotes || '')}</p>
               <div class="text-[10px] text-emerald-600 font-bold mt-1">✓ Sent to Arshad Shaikh • Founder Pranav Notified</div>
             </div>
           ` : ''}
 
           ${lead.arshadChecked ? `
             <div class="text-[10px] text-blue-700 dark:text-blue-400 font-bold">
-              ✓ Arshad Shaikh verified client packaging & pricing alignment.
+              ✓ Arshad Shaikh verified client packaging &amp; pricing alignment.
             </div>
           ` : ''}
 
           ${lead.approvedBy ? `
             <div class="p-2 rounded bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 text-[11px] font-bold text-[#026047] dark:text-emerald-300 flex items-center gap-1.5">
-              <span>👑</span> Approved for Final Client Delivery by ${lead.approvedBy} on ${formatDate(lead.approvedAt)}
+              <span>👑</span> Approved for Final Client Delivery by ${escapeHtml(lead.approvedBy)} on ${escapeHtml(formatDate(lead.approvedAt))}
             </div>
           ` : ''}
         </div>
@@ -3359,40 +3684,36 @@ function renderSingleLeadCard(lead, currentRole) {
           Current Assigned Action:
           <strong class="text-slate-900 dark:text-white">
             ${lead.status === 'submitted_to_founder' ? 'Founder Pranav allocates technical work to Vivek' : ''}
-            ${lead.status === 'allocated_to_vivek' ? 'Vivek Gajdhane completes technical build & submits' : ''}
-            ${lead.status === 'sent_to_arshad_notified_founder' ? 'Arshad reviews & Founder Pranav gives final sign-off' : ''}
+            ${lead.status === 'allocated_to_vivek' ? 'Vivek Gajdhane completes technical build &amp; submits' : ''}
+            ${lead.status === 'sent_to_arshad_notified_founder' ? 'Arshad reviews &amp; Founder Pranav gives final sign-off' : ''}
             ${lead.status === 'approved_for_delivery' ? 'Project successfully delivered to client!' : ''}
           </strong>
         </div>
 
         <div class="flex items-center gap-2 flex-wrap">
-          <!-- Step 1 to 2: Pranav allocates to Vivek -->
           ${lead.status === 'submitted_to_founder' && isPranav ? `
-            <button onclick="openAllocateLeadModal('${lead.id}')"
+            <button onclick="openAllocateLeadModal('${lid}')"
               class="px-3.5 py-1.5 rounded-xl bg-[#026047] text-[#fffde8] font-bold text-xs hover:bg-[#024d39] transition shadow-sm flex items-center gap-1 cursor-pointer">
               <span>👑</span> Allocate to Vivek (Tech)
             </button>
           ` : ''}
 
-          <!-- Step 2 to 3: Vivek (or Founder) completes tech & forwards to Arshad, notifying Founder -->
           ${lead.status === 'allocated_to_vivek' && (isVivek || isPranav) ? `
-            <button onclick="openTechForwardModal('${lead.id}')"
+            <button onclick="openTechForwardModal('${lid}')"
               class="px-3.5 py-1.5 rounded-xl bg-purple-700 text-white font-bold text-xs hover:bg-purple-800 transition shadow-sm flex items-center gap-1 cursor-pointer">
-              <span>💻</span> Deliver Tech & Forward to Arshad
+              <span>💻</span> Deliver Tech &amp; Forward to Arshad
             </button>
           ` : ''}
 
-          <!-- Step 3: Arshad verifies deal alignment -->
           ${lead.status === 'sent_to_arshad_notified_founder' && (isArshad || isPranav) && !lead.arshadChecked ? `
-            <button onclick="confirmArshadCheck('${lead.id}')"
+            <button onclick="confirmArshadCheck('${lid}')"
               class="px-3 py-1.5 rounded-xl bg-blue-700 text-white font-bold text-xs hover:bg-blue-800 transition shadow-sm flex items-center gap-1 cursor-pointer">
               <span>🤝</span> Verify Deal Alignment
             </button>
           ` : ''}
 
-          <!-- Step 4: Founder Pranav final delivery sign-off -->
           ${lead.status === 'sent_to_arshad_notified_founder' && isPranav ? `
-            <button onclick="openDeliveryApprovalModal('${lead.id}')"
+            <button onclick="openDeliveryApprovalModal('${lid}')"
               class="px-3.5 py-1.5 rounded-xl bg-[#026047] text-[#fffde8] font-black text-xs hover:bg-[#024d39] transition shadow-sm flex items-center gap-1 cursor-pointer">
               <span>👑</span> Approve for Delivery
             </button>
@@ -3400,7 +3721,7 @@ function renderSingleLeadCard(lead, currentRole) {
 
           ${lead.status === 'approved_for_delivery' ? `
             <span class="px-3 py-1.5 rounded-xl bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-bold text-xs flex items-center gap-1">
-              <span>✓</span> Delivery Complete & Signed Off
+              <span>✓</span> Delivery Complete &amp; Signed Off
             </span>
           ` : ''}
         </div>
@@ -3412,6 +3733,7 @@ window.renderSingleLeadCard = renderSingleLeadCard;
 
 // Modal Controls & Form Submissions
 window.openNewLeadModal = function () {
+  if (!requireAuth('submit client leads')) return;
   const modal = document.getElementById('modal-new-lead');
   if (modal) modal.classList.remove('hidden');
 };
@@ -3422,6 +3744,7 @@ window.closeNewLeadModal = function () {
 };
 
 window.submitClientLead = function () {
+  if (!requireAuth('submit client leads')) return;
   const clientName = document.getElementById('lead-client-name')?.value.trim();
   const contactPerson = document.getElementById('lead-contact-person')?.value.trim();
   const phone = document.getElementById('lead-phone')?.value.trim();
@@ -3429,56 +3752,49 @@ window.submitClientLead = function () {
   const dealValue = parseFloat(document.getElementById('lead-deal-value')?.value) || 0;
   const requirements = document.getElementById('lead-requirements')?.value.trim();
 
-  if (!clientName || !requirements || !phone) {
-    alert('Please fill out all required fields.');
+  if (!clientName || !requirements || !phone || dealValue < 0) {
+    alert('Please fill out all required lead fields.');
     return;
   }
 
+  const submitter = MEMBER_NAME_MAP[getCurrentMemberId()] || 'Aryan Bhore';
   const newLeadId = 'lead-' + Date.now();
   const leadNum = 'LEAD-2026-' + String((STATE.leads || []).length + 1).padStart(3, '0');
 
-  const newLead = {
+  const newLead = normalizeLead({
     id: newLeadId,
     leadNumber: leadNum,
-    clientName: clientName,
-    contactPerson: contactPerson,
-    phone: phone,
-    productType: product,
-    dealValue: dealValue,
-    requirements: requirements,
-    submittedBy: STATE.activeRole === 'aryan' ? 'Aryan Bhore' : (STATE.activeRole === 'pranav' ? 'Pranav Bansode' : 'Aryan Bhore'),
+    clientName,
+    contactPerson,
+    phone,
+    productType: product || 'LeadX Platform',
+    dealValue,
+    requirements,
+    submittedBy: submitter,
     submittedAt: new Date().toISOString(),
-    status: 'submitted_to_founder' // Step 1 complete -> Sent to Founder
-  };
+    status: 'submitted_to_founder',
+  });
 
   STATE.leads.unshift(newLead);
   saveLeadsToStorage();
-
-  // Audit Log
-  STATE.auditLogs.unshift({
-    id: 'log-' + Date.now(),
-    action: 'LEAD_SUBMITTED',
-    details: `${newLead.submittedBy} submitted new client lead "${clientName}" (${formatINR(dealValue)}) directly to Founder Pranav Bansode.`,
-    performedBy: newLead.submittedBy,
-    date: new Date().toISOString().replace('T', ' ').slice(0, 16)
-  });
+  recordAuditLog(
+    'LEAD_SUBMITTED',
+    `${newLead.submittedBy} submitted new client lead "${clientName}" (${formatINR(dealValue)}) directly to Founder Pranav Bansode.`,
+    newLead.submittedBy
+  );
+  saveAppStateToStorage();
 
   closeNewLeadModal();
-
-  // Reset form
   const form = document.querySelector('#modal-new-lead form');
   if (form) form.reset();
 
   showToast(`🎯 Lead "${clientName}" submitted! Routed directly to Founder Pranav Bansode for allocation.`);
-
   renderCurrentTab();
+  renderSidebarNav(STATE.currentTab);
 };
 
 window.openAllocateLeadModal = function (leadId) {
-  if (STATE.activeRole !== 'pranav') {
-    alert('Only Founder Pranav Bansode can allocate project technical work.');
-    return;
-  }
+  if (!requireFounder('allocate project technical work')) return;
   const lead = (STATE.leads || []).find((l) => l.id === leadId);
   if (!lead) return;
 
@@ -3491,8 +3807,11 @@ window.openAllocateLeadModal = function (leadId) {
   const scoutDisplay = document.getElementById('allocate-lead-scout-display');
   if (scoutDisplay) scoutDisplay.textContent = `${lead.submittedBy || 'Aryan Bhore'}`;
 
+  const instrInput = document.getElementById('allocate-founder-instructions');
+  if (instrInput) instrInput.value = lead.founderInstructions || '';
+
   const dueInput = document.getElementById('allocate-due-date');
-  if (dueInput && !dueInput.value) {
+  if (dueInput) {
     const d = new Date();
     d.setDate(d.getDate() + 7);
     dueInput.value = d.toISOString().split('T')[0];
@@ -3508,12 +3827,10 @@ window.closeAllocateLeadModal = function () {
 };
 
 window.confirmAllocateLeadToVivek = function () {
-  if (STATE.activeRole !== 'pranav') {
-    alert('Security Gate: Only Founder & Director Pranav Bansode can allocate leads to Vivek.');
-    return;
-  }
+  if (!requireFounder('allocate leads to Vivek')) return;
   const leadId = document.getElementById('allocate-lead-id')?.value;
-  const instructions = document.getElementById('allocate-founder-instructions')?.value.trim();
+  const instrEl = document.getElementById('allocate-founder-instructions');
+  const instructions = instrEl ? instrEl.value.trim() : '';
   const dueDate = document.getElementById('allocate-due-date')?.value;
   const priority = document.getElementById('allocate-priority')?.value || 'high';
 
@@ -3526,6 +3843,7 @@ window.confirmAllocateLeadToVivek = function () {
   if (!lead) return;
 
   lead.status = 'allocated_to_vivek';
+  lead.stage = 'allocated_to_vivek';
   lead.founderInstructions = instructions;
   lead.dueDate = dueDate;
   lead.priority = priority;
@@ -3533,44 +3851,45 @@ window.confirmAllocateLeadToVivek = function () {
   lead.allocatedTo = 'mem-03';
   lead.allocatedToName = 'Vivek Gajdhane';
 
-  // Automatically create linked delegated task in STATE.assignedTasks for Vivek
   const newTask = {
     id: 'task-lead-' + Date.now(),
     title: `Develop ${lead.productType} for ${lead.clientName}`,
     assignedTo: 'mem-03',
     assignedToName: 'Vivek Gajdhane',
-    projectId: lead.productType.includes('Smart Review') ? 'prj-srm' : 'prj-leadx',
+    projectId: (lead.productType || '').includes('Smart Review') ? 'prj-srm' : 'prj-leadx',
     projectName: lead.productType,
-    priority: priority,
-    dueDate: dueDate,
+    priority,
+    dueDate,
     assignedDate: new Date().toISOString().split('T')[0],
     assignedBy: 'Pranav Bansode (Founder)',
     description: `[Allocated from Aryan's Lead ${lead.leadNumber}]: ${instructions}`,
     status: 'in_progress',
-    leadId: lead.id
+    leadId: lead.id,
   };
 
   STATE.assignedTasks.unshift(newTask);
   saveAssignedTasksToStorage();
   saveLeadsToStorage();
+  recordAuditLog(
+    'LEAD_ALLOCATED',
+    `Founder Pranav allocated technical development of "${lead.clientName}" to Vivek Gajdhane.`,
+    'Pranav Bansode (Founder / Director)'
+  );
+  saveAppStateToStorage();
 
-  // Audit log
-  STATE.auditLogs.unshift({
-    id: 'log-' + Date.now(),
-    action: 'LEAD_ALLOCATED',
-    details: `Founder Pranav allocated technical development of "${lead.clientName}" to Vivek Gajdhane.`,
-    performedBy: 'Pranav Bansode (Founder / Director)',
-    date: new Date().toISOString().replace('T', ' ').slice(0, 16)
-  });
-
+  if (instrEl) instrEl.value = '';
   closeAllocateLeadModal();
-  showToast(`🚀 Work allocated to Vivek Gajdhane! Vivek notified in his engineering workspace.`);
-
+  showToast('🚀 Work allocated to Vivek Gajdhane! Vivek notified in his engineering workspace.');
   renderCurrentTab();
   renderSidebarNav(STATE.currentTab);
 };
 
 window.openTechForwardModal = function (leadId) {
+  if (!requireAuth('submit technical deliverables')) return;
+  if (STATE.activeRole !== 'vivek' && STATE.activeRole !== 'pranav') {
+    alert('Security Gate: Only Vivek Gajdhane or Founder Pranav can submit technical deliverables.');
+    return;
+  }
   const lead = (STATE.leads || []).find((l) => l.id === leadId);
   if (!lead) return;
 
@@ -3579,6 +3898,11 @@ window.openTechForwardModal = function (leadId) {
 
   const clientDisplay = document.getElementById('forward-lead-client-display');
   if (clientDisplay) clientDisplay.textContent = `${lead.clientName} (${lead.productType})`;
+
+  const urlInput = document.getElementById('forward-tech-deliverable-url');
+  if (urlInput) urlInput.value = '';
+  const notesInput = document.getElementById('forward-tech-notes');
+  if (notesInput) notesInput.value = '';
 
   const modal = document.getElementById('modal-tech-forward');
   if (modal) modal.classList.remove('hidden');
@@ -3590,16 +3914,25 @@ window.closeTechForwardModal = function () {
 };
 
 window.confirmTechForward = function () {
+  if (!requireAuth('submit technical deliverables')) return;
   if (STATE.activeRole !== 'vivek' && STATE.activeRole !== 'pranav') {
     alert('Security Gate: Only Vivek Gajdhane or Founder Pranav can submit technical deliverables.');
     return;
   }
   const leadId = document.getElementById('forward-lead-id')?.value;
-  const deliverableUrl = document.getElementById('forward-tech-deliverable-url')?.value.trim();
-  const techNotes = document.getElementById('forward-tech-notes')?.value.trim();
+  const urlEl = document.getElementById('forward-tech-deliverable-url');
+  const notesEl = document.getElementById('forward-tech-notes');
+  const deliverableUrl = urlEl ? urlEl.value.trim() : '';
+  const techNotes = notesEl ? notesEl.value.trim() : '';
 
   if (!deliverableUrl || !techNotes) {
     alert('Please enter deliverable URL and technical implementation summary.');
+    return;
+  }
+
+  const safeUrl = sanitizeUrl(deliverableUrl);
+  if (!safeUrl) {
+    alert('Security Validation: Please enter a valid http:// or https:// deliverable URL.');
     return;
   }
 
@@ -3607,37 +3940,37 @@ window.confirmTechForward = function () {
   if (!lead) return;
 
   lead.status = 'sent_to_arshad_notified_founder';
-  lead.deliverableUrl = deliverableUrl;
+  lead.stage = 'sent_to_arshad_notified_founder';
+  lead.deliverableUrl = safeUrl;
   lead.techNotes = techNotes;
   lead.techCompletedAt = new Date().toISOString();
   lead.founderNotified = true;
 
-  // Update linked task in STATE.assignedTasks
-  const linkedTask = (STATE.assignedTasks || []).find((t) => t.leadId === lead.id || t.title.includes(lead.clientName));
+  const linkedTask = (STATE.assignedTasks || []).find((t) => t.leadId === lead.id);
   if (linkedTask) {
     linkedTask.status = 'review_pending';
     saveAssignedTasksToStorage();
   }
 
   saveLeadsToStorage();
+  recordAuditLog(
+    'TECH_DELIVERED_FORWARDED',
+    `Vivek completed technical development for "${lead.clientName}". Forwarded to Arshad Shaikh; Founder Pranav notified.`,
+    MEMBER_NAME_MAP[getCurrentMemberId()] || 'Vivek Gajdhane (Technical Dept)'
+  );
+  saveAppStateToStorage();
 
-  // Audit log
-  STATE.auditLogs.unshift({
-    id: 'log-' + Date.now(),
-    action: 'TECH_DELIVERED_FORWARDED',
-    details: `Vivek completed technical development for "${lead.clientName}". Forwarded to Arshad Shaikh; Founder Pranav notified.`,
-    performedBy: 'Vivek Gajdhane (Technical Dept)',
-    date: new Date().toISOString().replace('T', ' ').slice(0, 16)
-  });
-
+  if (urlEl) urlEl.value = '';
+  if (notesEl) notesEl.value = '';
   closeTechForwardModal();
-  showToast(`📤 Technical deliverables submitted to Arshad Shaikh! Founder Pranav Bansode notified.`);
+  showToast('📤 Technical deliverables submitted to Arshad Shaikh! Founder Pranav Bansode notified.');
 
   renderCurrentTab();
   renderSidebarNav(STATE.currentTab);
 };
 
 window.confirmArshadCheck = function (leadId) {
+  if (!requireAuth('verify commercial deal alignment')) return;
   if (STATE.activeRole !== 'arshad' && STATE.activeRole !== 'pranav') {
     alert('Security Gate: Only Arshad Shaikh (Co-Founder) or Founder Pranav can verify commercial deal alignment.');
     return;
@@ -3648,24 +3981,19 @@ window.confirmArshadCheck = function (leadId) {
   lead.arshadChecked = true;
   lead.arshadCheckedAt = new Date().toISOString();
   saveLeadsToStorage();
-
-  STATE.auditLogs.unshift({
-    id: 'log-' + Date.now(),
-    action: 'LEAD_CLIENT_CHECK',
-    details: `Arshad Shaikh verified commercial packaging & deal alignment for "${lead.clientName}".`,
-    performedBy: 'Arshad Shaikh (Co-Founder)',
-    date: new Date().toISOString().replace('T', ' ').slice(0, 16)
-  });
+  recordAuditLog(
+    'LEAD_CLIENT_CHECK',
+    `Arshad Shaikh verified commercial packaging & deal alignment for "${lead.clientName}".`,
+    MEMBER_NAME_MAP[getCurrentMemberId()] || 'Arshad Shaikh (Co-Founder)'
+  );
+  saveAppStateToStorage();
 
   showToast(`🤝 Arshad confirmed deal alignment for "${lead.clientName}"! Awaiting Founder Pranav's final delivery approval.`);
   renderCurrentTab();
 };
 
 window.openDeliveryApprovalModal = function (leadId) {
-  if (STATE.activeRole !== 'pranav') {
-    alert('Only Founder & Director Pranav Bansode can grant final delivery sign-off.');
-    return;
-  }
+  if (!requireFounder('grant final delivery sign-off')) return;
   const lead = (STATE.leads || []).find((l) => l.id === leadId);
   if (!lead) return;
 
@@ -3675,14 +4003,22 @@ window.openDeliveryApprovalModal = function (leadId) {
   const clientDisplay = document.getElementById('delivery-lead-client-display');
   if (clientDisplay) clientDisplay.textContent = `${lead.clientName} (${lead.productType} • ${formatINR(lead.dealValue)})`;
 
+  const notesInput = document.getElementById('delivery-founder-notes');
+  if (notesInput) notesInput.value = '';
+
+  const safeUrl = lead.deliverableUrl ? sanitizeUrl(lead.deliverableUrl) : '';
   const flowSummary = document.getElementById('delivery-lead-flow-summary');
   if (flowSummary) {
     flowSummary.innerHTML = `
       <div class="space-y-1 text-slate-600 dark:text-slate-300">
-        <div>🎯 <strong>Lead Scouted:</strong> By ${lead.submittedBy || 'Aryan Bhore'} (${formatDate(lead.submittedAt)})</div>
-        <div>👑 <strong>Technical Allocation:</strong> Assigned to Vivek with scope: "${lead.founderInstructions || 'Core deliverables'}"</div>
-        <div>💻 <strong>Vivek's Deliverables:</strong> <a href="${lead.deliverableUrl || '#'}" target="_blank" class="text-blue-600 underline font-mono">${lead.deliverableUrl || 'Completed build'}</a></div>
-        <div>🤝 <strong>Arshad Alignment:</strong> ${lead.arshadChecked ? '✓ Checked & Verified' : 'Standard packaging verified'}</div>
+        <div>🎯 <strong>Lead Scouted:</strong> By ${escapeHtml(lead.submittedBy || 'Aryan Bhore')} (${escapeHtml(formatDate(lead.submittedAt))})</div>
+        <div>👑 <strong>Technical Allocation:</strong> Assigned to Vivek with scope: "${escapeHtml(lead.founderInstructions || 'Core deliverables')}"</div>
+        <div>💻 <strong>Vivek's Deliverables:</strong> ${
+          safeUrl
+            ? `<a href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer" class="text-blue-600 underline font-mono">${escapeHtml(lead.deliverableUrl)}</a>`
+            : `<span class="text-slate-500 font-mono">${escapeHtml(lead.deliverableUrl || 'Completed build')}</span>`
+        }</div>
+        <div>🤝 <strong>Arshad Alignment:</strong> ${lead.arshadChecked ? '✓ Checked &amp; Verified' : 'Standard packaging verified'}</div>
       </div>
     `;
   }
@@ -3697,52 +4033,63 @@ window.closeDeliveryApprovalModal = function () {
 };
 
 window.confirmDeliveryApproval = function () {
-  if (STATE.activeRole !== 'pranav') {
-    alert('Security Gate: Only Founder & Director Pranav Bansode can grant final delivery sign-off.');
-    return;
-  }
+  if (!requireFounder('grant final delivery sign-off')) return;
   const leadId = document.getElementById('delivery-lead-id')?.value;
   const lead = (STATE.leads || []).find((l) => l.id === leadId);
-  if (!lead) return;
+  if (!lead || lead.status === 'approved_for_delivery') return;
+
+  const founderNotesEl = document.getElementById('delivery-founder-notes');
+  const founderNotes = founderNotesEl ? founderNotesEl.value.trim() : '';
 
   lead.status = 'approved_for_delivery';
+  lead.stage = 'approved_for_delivery';
   lead.approvedBy = 'Pranav Bansode (Founder & Director)';
   lead.approvedAt = new Date().toISOString();
+  if (founderNotes) lead.deliveryNotes = founderNotes;
 
-  // Mark linked task completed
-  const linkedTask = (STATE.assignedTasks || []).find((t) => t.leadId === lead.id || t.title.includes(lead.clientName));
+  const linkedTask = (STATE.assignedTasks || []).find((t) => t.leadId === lead.id);
   if (linkedTask) {
     linkedTask.status = 'completed';
+    linkedTask.completedDate = new Date().toISOString().split('T')[0];
+    linkedTask.approvedBy = 'Pranav Bansode (Founder)';
     saveAssignedTasksToStorage();
   }
 
-  // Also automatically enroll revenue deal in STATE.income if not exists
-  const existsIncome = (STATE.income || []).some((i) => i.clientName === lead.clientName);
-  if (!existsIncome && lead.dealValue > 0) {
+  const projectId = (lead.productType || '').includes('Smart Review') ? 'prj-srm' : 'prj-leadx';
+  const existsIncome = (STATE.income || []).some((i) => i.leadId === lead.id);
+  if (!existsIncome && Number(lead.dealValue) > 0) {
+    const dealAmt = Number(lead.dealValue) || 0;
     STATE.income.unshift({
       id: 'inc-deal-' + Date.now(),
+      leadId: lead.id,
+      source: 'Client Inflow',
       clientName: lead.clientName,
-      projectId: lead.productType.includes('Smart Review') ? 'prj-srm' : 'prj-leadx',
+      projectId,
       projectName: lead.productType,
-      amount: lead.dealValue,
+      amount: dealAmt,
       paymentDate: new Date().toISOString().split('T')[0],
       status: 'received',
-      paymentMethod: 'Bank Wire / NEFT',
+      paymentMethod: 'bank_transfer',
+      createdBy: 'Pranav Bansode (Founder / Director)',
+      approvedBy: 'Pranav Bansode (Founder / Director)',
+      approvedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
       invoiceNumber: 'INV-2026-' + String((STATE.income || []).length + 101),
-      description: `Project delivery finalized & approved for client ${lead.clientName}`
+      notes: founderNotes || `Project delivery finalized & approved for client ${lead.clientName}`,
     });
+
+    const prj = (STATE.projects || []).find((p) => p.id === projectId);
+    if (prj) prj.revenueReceived = (prj.revenueReceived || 0) + dealAmt;
   }
 
   saveLeadsToStorage();
+  recordAuditLog(
+    'DELIVERY_APPROVED',
+    `Founder Pranav Bansode gave final delivery sign-off for client "${lead.clientName}" (${formatINR(lead.dealValue)}).`,
+    'Pranav Bansode (Founder / Director)'
+  );
+  saveAppStateToStorage();
 
-  STATE.auditLogs.unshift({
-    id: 'log-' + Date.now(),
-    action: 'DELIVERY_APPROVED',
-    details: `Founder Pranav Bansode gave final delivery sign-off for client "${lead.clientName}" (${formatINR(lead.dealValue)}).`,
-    performedBy: 'Pranav Bansode (Founder & Director)',
-    date: new Date().toISOString().replace('T', ' ').slice(0, 16)
-  });
-
+  if (founderNotesEl) founderNotesEl.value = '';
   closeDeliveryApprovalModal();
   showToast(`👑 Final delivery approved for ${lead.clientName}! Revenue deal enrolled.`);
 
@@ -3784,17 +4131,18 @@ function renderSalesDone() {
   const container = document.getElementById('sales-done-container');
   if (!container) return;
 
-  const allSales = STATE.income || [];
+  const allSales = (STATE.income || []).filter((s) => matchesDateFilter(s.paymentDate));
+  const activeSales = allSales.filter((s) => s.status !== 'rejected');
 
   // Metrics
-  const totalSalesVal = allSales.reduce((sum, s) => sum + s.amount, 0);
-  const receivedVal = allSales
+  const totalSalesVal = activeSales.reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
+  const receivedVal = activeSales
     .filter((s) => s.status === 'received')
-    .reduce((sum, s) => sum + s.amount, 0);
-  const leadxSales = allSales.filter((s) => s.projectId === 'prj-leadx');
-  const leadxVal = leadxSales.reduce((sum, s) => sum + s.amount, 0);
-  const srmSales = allSales.filter((s) => s.projectId === 'prj-srm');
-  const srmVal = srmSales.reduce((sum, s) => sum + s.amount, 0);
+    .reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
+  const leadxSales = activeSales.filter((s) => s.projectId === 'prj-leadx');
+  const leadxVal = leadxSales.reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
+  const srmSales = activeSales.filter((s) => s.projectId === 'prj-srm');
+  const srmVal = srmSales.reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
 
   // Filtering
   let visible = allSales;
@@ -3817,7 +4165,7 @@ function renderSalesDone() {
       <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
         <span class="text-[11px] text-slate-400 font-semibold uppercase">Total Sales Closed</span>
         <div class="text-xl font-bold text-slate-900 dark:text-white mt-1">${formatINR(totalSalesVal)}</div>
-        <span class="text-[10px] text-slate-500 mt-0.5 block">${allSales.length} Total Sales Contracts</span>
+        <span class="text-[10px] text-slate-500 mt-0.5 block">${activeSales.length} Active Sales Contracts</span>
       </div>
 
       <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
@@ -3846,13 +4194,13 @@ function renderSalesDone() {
           <input
             type="text"
             placeholder="Search sales by client, product, deal..."
-            value="${STATE.salesSearch || ''}"
+            value="${escapeHtml(STATE.salesSearch || '')}"
             oninput="handleSalesSearch(this.value)"
             class="w-full pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:outline-none focus:border-[#026047]"
           />
           <span class="absolute left-2.5 top-2 text-slate-400">🔍</span>
         </div>
-        <div class="flex items-center gap-1">
+        <div class="flex items-center gap-1 flex-wrap">
           <button onclick="filterSalesProduct('ALL')" class="px-2.5 py-1 rounded-lg ${
             STATE.salesProductFilter === 'ALL'
               ? 'bg-[#026047] text-[#fffde8] font-bold shadow-sm'
@@ -3881,6 +4229,7 @@ function renderSalesDone() {
           <option value="ALL" ${STATE.salesStatusFilter === 'ALL' ? 'selected' : ''}>All Statuses</option>
           <option value="received" ${STATE.salesStatusFilter === 'received' ? 'selected' : ''}>Verified in Bank</option>
           <option value="pending_approval" ${STATE.salesStatusFilter === 'pending_approval' ? 'selected' : ''}>Pending Clearance</option>
+          <option value="rejected" ${STATE.salesStatusFilter === 'rejected' ? 'selected' : ''}>Rejected</option>
         </select>
         <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/60 text-[#026047] dark:text-emerald-300 font-bold text-[11px]">
           <span>📋</span> List Pattern Active
@@ -3893,9 +4242,9 @@ function renderSalesDone() {
       <table class="w-full text-left text-xs">
         <thead>
           <tr class="border-b border-slate-200 dark:border-slate-700 text-slate-500 font-semibold text-[11px]">
-            <th class="py-2.5 px-3">Sale ID & Date</th>
+            <th class="py-2.5 px-3">Sale ID &amp; Date</th>
             <th class="py-2.5 px-3">Product Sold</th>
-            <th class="py-2.5 px-3">Client & Deal Scope</th>
+            <th class="py-2.5 px-3">Client &amp; Deal Scope</th>
             <th class="py-2.5 px-3">Closed By</th>
             <th class="py-2.5 px-3 text-right">Deal Amount (₹)</th>
             <th class="py-2.5 px-3 text-center">Status</th>
@@ -3912,73 +4261,85 @@ function renderSalesDone() {
                 </td></tr>`
               : visible
                   .map((sale) => {
+                    const sId = safeId(sale.id);
                     const isExp = !!STATE.expandedSaleIds[sale.id];
                     const isReceived = sale.status === 'received';
+                    const isRejected = sale.status === 'rejected';
                     const isLeadX = sale.projectId === 'prj-leadx';
                     const productBadgeClass = isLeadX
                       ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
                       : 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300';
 
+                    const statusBadgeHtml = isReceived
+                      ? `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Verified in Bank
+                        </span>`
+                      : isRejected
+                      ? `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                          ✕ Rejected
+                        </span>`
+                      : `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                          <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span> Awaiting Approval
+                        </span>`;
+
                     return `
                     <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition">
                       <td class="py-3 px-3">
-                        <div class="font-mono font-bold text-slate-900 dark:text-white uppercase">${sale.id}</div>
-                        <div class="text-[10px] text-slate-400 font-mono">${sale.paymentDate}</div>
+                        <div class="font-mono font-bold text-slate-900 dark:text-white uppercase">${escapeHtml(sale.id)}</div>
+                        <div class="text-[10px] text-slate-400 font-mono">${escapeHtml(sale.paymentDate)}</div>
                       </td>
 
                       <td class="py-3 px-3">
-                        <span class="px-2 py-0.5 rounded text-[10px] font-bold ${productBadgeClass}">${sale.projectName}</span>
-                        <div class="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">${sale.source}</div>
+                        <span class="px-2 py-0.5 rounded text-[10px] font-bold ${productBadgeClass}">${escapeHtml(sale.projectName)}</span>
+                        <div class="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">${escapeHtml(sale.source || 'Client Inflow')}</div>
                       </td>
 
                       <td class="py-3 px-3">
-                        <div class="font-bold text-slate-900 dark:text-white text-xs">${sale.clientName}</div>
-                        <p class="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1 max-w-xs mt-0.5">${sale.notes || 'Official product sale agreement'}</p>
+                        <div class="font-bold text-slate-900 dark:text-white text-xs">${escapeHtml(sale.clientName)}</div>
+                        <p class="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1 max-w-xs mt-0.5">${escapeHtml(sale.notes || 'Official product sale agreement')}</p>
                       </td>
 
                       <td class="py-3 px-3">
                         <div class="flex items-center gap-1.5">
                           <span class="w-5 h-5 rounded-full bg-[#026047] text-[#fffde8] flex items-center justify-center font-bold text-[9px]">
-                            ${(sale.createdBy || 'PB').slice(0, 2).toUpperCase()}
+                            ${escapeHtml((sale.createdBy || 'PB').slice(0, 2).toUpperCase())}
                           </span>
-                          <span class="font-medium text-slate-700 dark:text-slate-300 text-[11px]">${sale.createdBy}</span>
+                          <span class="font-medium text-slate-700 dark:text-slate-300 text-[11px]">${escapeHtml(sale.createdBy || 'Pranav Bansode')}</span>
                         </div>
                       </td>
 
                       <td class="py-3 px-3 text-right">
                         <div class="font-bold text-sm text-[#026047] dark:text-emerald-400">${formatINR(sale.amount)}</div>
-                        <span class="text-[9px] text-slate-400 block uppercase font-mono">${(sale.paymentMethod || 'bank_transfer').replace('_', ' ')}</span>
+                        <span class="text-[9px] text-slate-400 block uppercase font-mono">${escapeHtml((sale.paymentMethod || 'bank_transfer').replace(/_/g, ' '))}</span>
                       </td>
 
                       <td class="py-3 px-3 text-center">
-                        ${
-                          isReceived
-                            ? `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Verified in Bank
-                              </span>`
-                            : `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-                                <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span> Awaiting Approval
-                              </span>`
-                        }
+                        ${statusBadgeHtml}
                       </td>
 
                       <td class="py-3 px-3 text-right whitespace-nowrap">
                         <div class="flex items-center justify-end gap-1.5">
-                          <button onclick="toggleSaleDetails('${sale.id}')"
+                          <button onclick="toggleSaleDetails('${sId}')"
                             class="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs transition flex items-center gap-1">
                             <span>${isExp ? 'Hide' : 'Details'}</span>
                             <span class="text-[10px]">${isExp ? '▲' : '▼'}</span>
                           </button>
                           ${
                             isReceived
-                              ? `<button onclick="openInvoiceModal('${sale.id}')"
+                              ? `<button onclick="openInvoiceModal('${sId}')"
                                   class="px-2.5 py-1 rounded-lg bg-[#026047] text-[#fffde8] font-bold text-xs hover:bg-[#024d39] transition flex items-center gap-1 shadow-sm" title="View Official Invoice">
                                   <span>📄</span> Invoice
                                 </button>`
+                              : isRejected
+                              ? `<span class="text-[10px] text-rose-500 italic">Closed</span>`
                               : STATE.activeRole === 'pranav'
-                              ? `<button onclick="approveApprovalItem('income', '${sale.id}')"
+                              ? `<button onclick="approveIncome('${sId}')"
                                   class="px-2.5 py-1 rounded-lg bg-[#026047] text-[#fffde8] font-bold text-xs hover:bg-[#024d39] transition flex items-center gap-1 shadow-sm">
                                   <span>👑</span> Approve
+                                </button>
+                                <button onclick="rejectIncome('${sId}')"
+                                  class="px-2 py-1 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 font-bold text-xs transition">
+                                  ✕
                                 </button>`
                               : `<span class="text-[10px] text-slate-400 italic">Pending</span>`
                           }
@@ -3996,10 +4357,10 @@ function renderSalesDone() {
                           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-2.5">
                             <div>
                               <div class="font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                                <span>Sale Dossier: ${sale.clientName}</span>
-                                <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">${sale.id}</span>
+                                <span>Sale Dossier: ${escapeHtml(sale.clientName)}</span>
+                                <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">${escapeHtml(sale.id)}</span>
                               </div>
-                              <p class="text-[11px] text-slate-500 mt-0.5">Agreement Type: ${sale.source} • Product: ${sale.projectName}</p>
+                              <p class="text-[11px] text-slate-500 mt-0.5">Agreement Type: ${escapeHtml(sale.source || 'Client Inflow')} • Product: ${escapeHtml(sale.projectName)}</p>
                             </div>
                             <div class="text-right">
                               <span class="text-[11px] text-slate-400">Total Contract Value:</span>
@@ -4010,26 +4371,30 @@ function renderSalesDone() {
                           <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <div class="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
                               <span class="text-[10px] font-bold uppercase text-slate-400 block mb-1">Payment Verification</span>
-                              <div class="font-semibold text-slate-800 dark:text-slate-200">Mode: ${(sale.paymentMethod || 'bank_transfer').replace('_', ' ').toUpperCase()}</div>
-                              <div class="text-[10px] text-slate-500 mt-1">Settlement Date: ${sale.paymentDate}</div>
+                              <div class="font-semibold text-slate-800 dark:text-slate-200">Mode: ${escapeHtml((sale.paymentMethod || 'bank_transfer').replace(/_/g, ' ').toUpperCase())}</div>
+                              <div class="text-[10px] text-slate-500 mt-1">Settlement Date: ${escapeHtml(sale.paymentDate)}</div>
                               <div class="text-[10px] text-emerald-600 font-semibold mt-0.5">Account: Phoenix Tech Solutions Current A/c</div>
                             </div>
 
                             <div class="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
-                              <span class="text-[10px] font-bold uppercase text-slate-400 block mb-1">Contract & Scope Notes</span>
-                              <p class="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">${sale.notes || 'No notes specified.'}</p>
-                              <div class="text-[10px] text-slate-400 mt-1">Closed By: ${sale.createdBy}</div>
+                              <span class="text-[10px] font-bold uppercase text-slate-400 block mb-1">Contract &amp; Scope Notes</span>
+                              <p class="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">${escapeHtml(sale.notes || 'No notes specified.')}</p>
+                              <div class="text-[10px] text-slate-400 mt-1">Closed By: ${escapeHtml(sale.createdBy || 'Pranav Bansode')}</div>
                             </div>
 
                             <div class="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
                               <span class="text-[10px] font-bold uppercase text-slate-400 block mb-1">Agreed Project Incentive Pool</span>
                               <div class="font-bold text-[#026047] dark:text-emerald-400">10% Net Margin Contribution</div>
-                              <p class="text-[10px] text-slate-500 mt-1">Incentive splits amongst LeadX & Smart Review teams upon cost recovery.</p>
-                              <div class="mt-2">
-                                <button onclick="openInvoiceModal('${sale.id}')" class="px-2.5 py-1 rounded bg-[#026047] text-[#fffde8] text-[10px] font-bold hover:bg-[#024d39] transition">
-                                  📄 Print / Save Invoice
-                                </button>
-                              </div>
+                              <p class="text-[10px] text-slate-500 mt-1">Incentive splits amongst LeadX &amp; Smart Review teams upon cost recovery.</p>
+                              ${
+                                isReceived
+                                  ? `<div class="mt-2">
+                                      <button onclick="openInvoiceModal('${sId}')" class="px-2.5 py-1 rounded bg-[#026047] text-[#fffde8] text-[10px] font-bold hover:bg-[#024d39] transition">
+                                        📄 Print / Save Invoice
+                                      </button>
+                                    </div>`
+                                  : ''
+                              }
                             </div>
                           </div>
                         </div>
@@ -4129,13 +4494,25 @@ function renderProjects() {
   };
 
   if (isFinanceView) {
-    // ==========================================
-    // SUB-VIEW: PROJECT FINANCIALS & MARGINS (ONE-IN-ONE)
-    // ==========================================
     let targetProjects = allProjects;
     if (STATE.projectFinanceFilter && STATE.projectFinanceFilter !== 'ALL') {
       targetProjects = allProjects.filter((p) => p.id === STATE.projectFinanceFilter);
     }
+
+    const dynamicFilterBtns = allProjects
+      .map((p, idx) => {
+        const pId = safeId(p.id);
+        const active = STATE.projectFinanceFilter === p.id;
+        return `
+          <button onclick="filterProjectFinance('${pId}')" class="px-2.5 py-1 rounded-lg ${
+            active
+              ? 'bg-[#026047] text-[#fffde8] font-bold shadow-sm'
+              : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+          } transition text-xs cursor-pointer">
+            ${idx + 1}) ${escapeHtml(p.name)}
+          </button>`;
+      })
+      .join('');
 
     container.innerHTML = `
       <!-- Top Section Header & Sub-Tab Switcher (One In One) -->
@@ -4146,7 +4523,7 @@ function renderProjects() {
               <span>📁</span> Products List (${allProjects.length})
             </button>
             <button onclick="setProjectSubView('finance')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 bg-[#026047] text-[#fffde8] shadow-sm cursor-pointer">
-              <span>📊</span> Project Financials & P&L
+              <span>📊</span> Project Financials &amp; P&amp;L
             </button>
           </div>
         </div>
@@ -4167,20 +4544,15 @@ function renderProjects() {
             <span>←</span> Back to Products List
           </button>
           <span class="text-slate-400 text-[11px] font-semibold ml-1">Filter Project:</span>
-          <div class="inline-flex items-center gap-1">
+          <div class="inline-flex items-center gap-1 flex-wrap">
             <button onclick="filterProjectFinance('ALL')" class="px-2.5 py-1 rounded-lg ${STATE.projectFinanceFilter === 'ALL' ? 'bg-[#026047] text-[#fffde8] font-bold shadow-sm' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'} transition text-xs cursor-pointer">
               All Products (${allProjects.length})
             </button>
-            <button onclick="filterProjectFinance('prj-leadx')" class="px-2.5 py-1 rounded-lg ${STATE.projectFinanceFilter === 'prj-leadx' ? 'bg-[#026047] text-[#fffde8] font-bold shadow-sm' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'} transition text-xs cursor-pointer">
-              1) LeadX
-            </button>
-            <button onclick="filterProjectFinance('prj-srm')" class="px-2.5 py-1 rounded-lg ${STATE.projectFinanceFilter === 'prj-srm' ? 'bg-[#026047] text-[#fffde8] font-bold shadow-sm' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'} transition text-xs cursor-pointer">
-              2) Smart Review
-            </button>
+            ${dynamicFilterBtns}
           </div>
         </div>
         <div class="text-[11px] text-slate-500 font-semibold">
-          Live P&L, direct costs and partner splits
+          Live P&amp;L, direct costs and partner splits
         </div>
       </div>
 
@@ -4190,8 +4562,12 @@ function renderProjects() {
           const fin = getProjectFinancials(p.id);
           const netProfit = fin.received - fin.expenses;
           const isProfit = netProfit >= 0;
-          const projectIncome = (STATE.income || []).filter((i) => i.projectId === p.id);
-          const projectExpenses = (STATE.expenses || []).filter((e) => e.projectId === p.id);
+          const projectIncome = (STATE.income || []).filter(
+            (i) => i.projectId === p.id && matchesDateFilter(i.paymentDate)
+          );
+          const projectExpenses = (STATE.expenses || []).filter(
+            (e) => e.projectId === p.id && matchesDateFilter(e.date)
+          );
 
           return `
             <div class="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
@@ -4199,10 +4575,10 @@ function renderProjects() {
               <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
                 <div>
                   <div class="flex items-center gap-2">
-                    <h3 class="text-lg font-black text-slate-900 dark:text-white">${p.name}</h3>
-                    <span class="px-2 py-0.5 rounded text-xs font-mono font-bold bg-[#fffde8] text-[#026047] border border-[#026047]/30">${p.code}</span>
+                    <h3 class="text-lg font-black text-slate-900 dark:text-white">${escapeHtml(p.name)}</h3>
+                    <span class="px-2 py-0.5 rounded text-xs font-mono font-bold bg-[#fffde8] text-[#026047] border border-[#026047]/30">${escapeHtml(p.code)}</span>
                   </div>
-                  <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">${p.description}</p>
+                  <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">${escapeHtml(p.description)}</p>
                 </div>
                 <div class="flex items-center gap-2 self-start sm:self-auto">
                   <button onclick="openNewIncomeModal()" class="px-3 py-1.5 rounded-lg bg-[#026047] text-[#fffde8] font-bold text-xs hover:bg-[#024d39] cursor-pointer">
@@ -4216,28 +4592,24 @@ function renderProjects() {
 
               <!-- 4 Key Financial Metrics -->
               <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                <!-- Total Revenue Inflow -->
                 <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800">
                   <span class="text-[10px] text-slate-400 uppercase font-bold">Total Revenue Inflow</span>
                   <div class="text-base font-black text-[#026047] dark:text-emerald-400 mt-1">${formatINR(fin.received)}</div>
                   <span class="text-[10px] text-emerald-600 font-semibold block mt-1">Verified Received</span>
                 </div>
 
-                <!-- Direct Project Costs -->
                 <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800">
                   <span class="text-[10px] text-slate-400 uppercase font-bold">Direct Project Costs</span>
                   <div class="text-base font-black text-rose-600 dark:text-rose-400 mt-1">${formatINR(fin.expenses)}</div>
                   <span class="text-[10px] text-rose-500 font-semibold block mt-1">Approved Outflows</span>
                 </div>
 
-                <!-- Net Project Margin -->
                 <div class="p-3.5 rounded-xl ${isProfit ? 'bg-[#fffde8] dark:bg-[#026047]/20 border border-[#026047]/30' : 'bg-rose-50 dark:bg-rose-950/20 border border-rose-300'}">
                   <span class="text-[10px] ${isProfit ? 'text-[#026047] dark:text-[#fffde8]' : 'text-rose-700'} uppercase font-bold">Net Project Margin</span>
                   <div class="text-base font-black ${isProfit ? 'text-[#026047] dark:text-emerald-300' : 'text-rose-600'} mt-1">${formatINR(netProfit)}</div>
                   <span class="text-[10px] text-slate-500 font-semibold block mt-1">${netProfit === 0 ? '100% Cost Recovery' : (netProfit > 0 ? 'Profitable' : 'Deficit')}</span>
                 </div>
 
-                <!-- Pending Expected Inflow -->
                 <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800">
                   <span class="text-[10px] text-slate-400 uppercase font-bold">Pending Invoices</span>
                   <div class="text-base font-black text-amber-600 dark:text-amber-400 mt-1">${formatINR(fin.pending)}</div>
@@ -4248,10 +4620,10 @@ function renderProjects() {
               <!-- Team Revenue Allocation Pills -->
               <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-800 text-xs flex flex-wrap items-center justify-between gap-2">
                 <span class="font-bold text-slate-700 dark:text-slate-300">Contractual Profit Share Allocation:</span>
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-2 flex-wrap">
                   ${(p.membersAllocation || []).map((m) => `
                     <span class="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[11px] font-semibold text-slate-800 dark:text-slate-200">
-                      ${m.name}: <strong class="text-[#026047] dark:text-emerald-400">${m.share}%</strong>
+                      ${escapeHtml(m.name)}: <strong class="text-[#026047] dark:text-emerald-400">${m.share}%</strong>
                     </span>
                   `).join('')}
                 </div>
@@ -4266,21 +4638,25 @@ function renderProjects() {
                     <span class="text-[10px] text-emerald-700 font-semibold">Inflows</span>
                   </div>
                   <div class="space-y-2">
-                    ${projectIncome.length === 0 ? '<div class="text-slate-400 text-xs py-2">No income recorded for this project yet.</div>' : projectIncome.map((inc) => `
+                    ${projectIncome.length === 0 ? '<div class="text-slate-400 text-xs py-2">No income recorded for this project yet.</div>' : projectIncome.map((inc) => {
+                      const iId = safeId(inc.id);
+                      const statusEl = inc.status === 'received'
+                        ? `<button onclick="openInvoiceModal('${iId}')" title="Official Invoice" class="px-2 py-0.5 rounded bg-[#026047]/10 hover:bg-[#026047] text-[#026047] hover:text-[#fffde8] font-bold text-[10px] transition cursor-pointer">Invoice</button>`
+                        : inc.status === 'rejected'
+                        ? '<span class="text-rose-600 text-[10px] font-bold">✕ Rejected</span>'
+                        : '<span class="text-amber-600 text-[10px] font-bold">Pending</span>';
+                      return `
                       <div class="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between text-xs">
                         <div>
-                          <div class="font-bold text-slate-900 dark:text-white">${inc.clientName}</div>
-                          <div class="text-[10px] text-slate-500">${formatDate(inc.paymentDate)} • ${inc.paymentMethod}</div>
+                          <div class="font-bold text-slate-900 dark:text-white">${escapeHtml(inc.clientName)}</div>
+                          <div class="text-[10px] text-slate-500">${escapeHtml(formatDate(inc.paymentDate))} • ${escapeHtml(inc.paymentMethod || 'bank_transfer')}</div>
                         </div>
                         <div class="flex items-center gap-2">
                           <span class="font-black text-[#026047] dark:text-emerald-400">${formatINR(inc.amount)}</span>
-                          ${inc.status === 'received'
-                            ? `<button onclick="openInvoiceModal('${inc.id}')" title="Official Invoice" class="px-2 py-0.5 rounded bg-[#026047]/10 hover:bg-[#026047] text-[#026047] hover:text-[#fffde8] font-bold text-[10px] transition cursor-pointer">Invoice</button>`
-                            : '<span class="text-amber-600 text-[10px] font-bold">Pending</span>'
-                          }
+                          ${statusEl}
                         </div>
-                      </div>
-                    `).join('')}
+                      </div>`;
+                    }).join('')}
                   </div>
                 </div>
 
@@ -4291,18 +4667,26 @@ function renderProjects() {
                     <span class="text-[10px] text-rose-600 font-semibold">Outflows</span>
                   </div>
                   <div class="space-y-2">
-                    ${projectExpenses.length === 0 ? '<div class="text-slate-400 text-xs py-2">No direct costs recorded.</div>' : projectExpenses.map((exp) => `
+                    ${projectExpenses.length === 0 ? '<div class="text-slate-400 text-xs py-2">No direct costs recorded.</div>' : projectExpenses.map((exp) => {
+                      const statusEl = exp.status === 'approved'
+                        ? '<span class="block text-[10px] text-emerald-700 font-semibold">✓ Approved</span>'
+                        : exp.status === 'rejected'
+                        ? '<span class="block text-[10px] text-rose-600 font-semibold">✕ Rejected</span>'
+                        : exp.status === 'reversed'
+                        ? '<span class="block text-[10px] text-slate-500 font-semibold">↺ Reversed</span>'
+                        : '<span class="block text-[10px] text-amber-600 font-semibold">⏳ Pending</span>';
+                      return `
                       <div class="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between text-xs">
                         <div>
-                          <div class="font-bold text-slate-900 dark:text-white">${exp.title}</div>
-                          <div class="text-[10px] text-slate-500">${formatDate(exp.date)} • Paid by ${exp.paidBy}</div>
+                          <div class="font-bold text-slate-900 dark:text-white">${escapeHtml(exp.title)}</div>
+                          <div class="text-[10px] text-slate-500">${escapeHtml(formatDate(exp.date))} • Paid by ${escapeHtml(exp.paidBy)}</div>
                         </div>
                         <div class="text-right">
                           <span class="font-black text-rose-600 dark:text-rose-400">${formatINR(exp.amount)}</span>
-                          <span class="block text-[10px] text-emerald-700 font-semibold">✓ Approved</span>
+                          ${statusEl}
                         </div>
-                      </div>
-                    `).join('')}
+                      </div>`;
+                    }).join('')}
                   </div>
                 </div>
               </div>
@@ -4315,17 +4699,16 @@ function renderProjects() {
     return;
   }
 
-  // ==========================================
-  // SUB-VIEW: PRODUCTS LIST (ONE-IN-ONE)
-  // ==========================================
+  // SUB-VIEW: PRODUCTS LIST
   let visibleProjects = allProjects;
   if (STATE.projectListFilter !== 'ALL') {
     visibleProjects = visibleProjects.filter((p) => {
       const details = techDetails[p.id] || {};
+      const cat = details.category || p.description || '';
       if (STATE.projectListFilter === 'B2B')
-        return p.id === 'prj-leadx' || (details.category && details.category.includes('B2B'));
+        return p.id === 'prj-leadx' || cat.includes('B2B');
       if (STATE.projectListFilter === 'AI')
-        return p.id === 'prj-srm' || (details.category && details.category.includes('Sentiment'));
+        return p.id === 'prj-srm' || cat.includes('Sentiment');
       return true;
     });
   }
@@ -4333,7 +4716,7 @@ function renderProjects() {
   if (STATE.projectListSearch) {
     visibleProjects = visibleProjects.filter((p) => {
       const details = techDetails[p.id] || {};
-      const haystack = `${p.name} ${p.code} ${p.description} ${details.category} ${(
+      const haystack = `${p.name} ${p.code} ${p.description} ${details.category || ''} ${(
         details.techStack || []
       ).join(' ')}`.toLowerCase();
       return haystack.includes(STATE.projectListSearch);
@@ -4349,7 +4732,7 @@ function renderProjects() {
             <span>📁</span> Products List (${allProjects.length})
           </button>
           <button onclick="setProjectSubView('finance')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer">
-            <span>📊</span> Project Financials & P&L
+            <span>📊</span> Project Financials &amp; P&amp;L
           </button>
         </div>
       </div>
@@ -4372,7 +4755,7 @@ function renderProjects() {
           <input
             type="text"
             placeholder="Search our designed products..."
-            value="${STATE.projectListSearch || ''}"
+            value="${escapeHtml(STATE.projectListSearch || '')}"
             oninput="handleProjectSearch(this.value)"
             class="w-full pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:outline-none focus:border-[#026047]"
           />
@@ -4422,10 +4805,9 @@ function renderProjects() {
              </div>`
           : visibleProjects
               .map((p, idx) => {
-                const isLeadX = p.id === 'prj-leadx';
-                const itemNum = isLeadX ? '01' : '02';
-                const displayName = isLeadX ? '1) LeadX' : '2) Smart Review Management';
-                const numBg = 'bg-[#026047]';
+                const pId = safeId(p.id);
+                const itemNum = String(idx + 1).padStart(2, '0');
+                const displayName = `${idx + 1}) ${escapeHtml(p.name)}`;
                 const fin = getProjectFinancials(p.id);
                 const netProfit = fin.received - fin.expenses;
                 const isProfit = netProfit >= 0;
@@ -4433,15 +4815,15 @@ function renderProjects() {
                 return `
                 <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between gap-3 hover:border-[#026047] transition">
                   <div class="flex items-center gap-3">
-                    <div class="w-9 h-9 rounded-xl ${numBg} text-white font-black text-xs flex items-center justify-center shadow-sm shrink-0">
+                    <div class="w-9 h-9 rounded-xl bg-[#026047] text-white font-black text-xs flex items-center justify-center shadow-sm shrink-0">
                       ${itemNum}
                     </div>
                     <div>
                       <div class="flex items-center gap-2">
                         <h3 class="text-sm font-bold text-slate-900 dark:text-white">${displayName}</h3>
-                        <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#fffde8] text-[#026047] border border-[#026047]/30">${p.code}</span>
+                        <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#fffde8] text-[#026047] border border-[#026047]/30">${escapeHtml(p.code)}</span>
                       </div>
-                      <div class="text-[11px] text-slate-500 mt-1 flex items-center gap-2">
+                      <div class="text-[11px] text-slate-500 mt-1 flex items-center gap-2 flex-wrap">
                         <span>Inflow: <strong class="text-[#026047] dark:text-emerald-400">${formatINR(fin.received)}</strong></span>
                         <span>•</span>
                         <span>Costs: <strong class="text-rose-600 dark:text-rose-400">${formatINR(fin.expenses)}</strong></span>
@@ -4451,7 +4833,7 @@ function renderProjects() {
                     </div>
                   </div>
                   <div class="flex items-center gap-2">
-                    <button onclick="viewProjectFinance('${p.id}')"
+                    <button onclick="viewProjectFinance('${pId}')"
                       class="px-3.5 py-1.5 rounded-2xl bg-[#ffffea] text-[#026047] border border-[#026047]/30 font-bold text-xs hover:bg-[#fff9c2] transition flex items-center gap-1.5 shadow-sm cursor-pointer">
                       <span>📊</span> View Financials
                     </button>
@@ -4472,10 +4854,7 @@ function renderProjectFinance() {
 window.renderProjectFinance = renderProjectFinance;
 
 window.openNewProjectModal = function () {
-  if (STATE.activeRole !== 'pranav') {
-    alert('Restricted: Only Pranav Bansode (Founder / Director) can create new company projects.');
-    return;
-  }
+  if (!requireFounder('create new company projects')) return;
   const modal = document.getElementById('modal-new-project');
   if (modal) modal.classList.remove('hidden');
 };
@@ -4486,13 +4865,19 @@ window.closeNewProjectModal = function () {
 };
 
 window.submitNewProject = function () {
-  const name = document.getElementById('prj-name').value;
-  const desc = document.getElementById('prj-desc').value;
-  const incentive = parseFloat(document.getElementById('prj-incentive').value) || 10;
+  if (!requireFounder('create new company projects')) return;
+  const nameEl = document.getElementById('prj-name');
+  const descEl = document.getElementById('prj-desc');
+  const incEl = document.getElementById('prj-incentive');
 
-  if (!name.trim()) return alert('Project name is required.');
+  const name = nameEl ? nameEl.value.trim() : '';
+  const desc = descEl ? descEl.value.trim() : '';
+  const incentive = Math.max(0, Math.min(100, parseFloat(incEl ? incEl.value : '10') || 10));
 
-  const code = 'PRJ-' + name.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+  if (!name) return alert('Project name is required.');
+
+  const slug = name.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6) || String(Date.now()).slice(-4);
+  const code = 'PRJ-' + slug;
 
   STATE.projects.push({
     id: 'prj-' + Date.now(),
@@ -4513,10 +4898,21 @@ window.submitNewProject = function () {
     createdAt: new Date().toISOString().split('T')[0],
   });
 
+  recordAuditLog(
+    'PROJECT_CREATED',
+    `Created new product/project "${name}" (${code}, ${incentive}% incentive pool)`,
+    'Pranav Bansode (Founder / Director)'
+  );
+  saveAppStateToStorage();
+
+  if (nameEl) nameEl.value = '';
+  if (descEl) descEl.value = '';
+
   closeNewProjectModal();
   updateProjectSelectOptions();
   renderProjects();
   renderDashboard();
+  renderReports();
   showToast(`Project ${name} created and connected to Finance Dashboard.`);
 };
 
@@ -4529,7 +4925,7 @@ function renderIncome() {
 // ==============================================================================
 function generateInvoiceCardHTML(inc) {
   const invNumber = 'PTS-INV-' + (inc.id || '01').toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const approvalDate = inc.approvedAt || formatDate(inc.paymentDate);
+  const approvalDate = inc.approvedAt || inc.approvedDate || formatDate(inc.paymentDate);
   const approver = inc.approvedBy || 'Pranav Bansode (Founder / Director)';
 
   return `
@@ -4541,15 +4937,15 @@ function generateInvoiceCardHTML(inc) {
           <div>
             <h2 class="text-lg font-black tracking-wider text-[#026047] uppercase leading-tight">Phoenix Tech Solutions</h2>
             <div class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">Private Limited</div>
-            <div class="text-[10px] text-slate-400">Corporate Finance & Client Revenue Desk</div>
+            <div class="text-[10px] text-slate-400">Corporate Finance &amp; Client Revenue Desk</div>
           </div>
         </div>
         <div class="sm:text-right">
           <span class="inline-block px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-300">
-            ✓ Paid & Verified
+            ✓ Paid &amp; Verified
           </span>
-          <div class="text-xs font-mono font-bold text-slate-800 mt-2">${invNumber}</div>
-          <div class="text-[11px] text-slate-500">Date: ${formatDate(inc.paymentDate)}</div>
+          <div class="text-xs font-mono font-bold text-slate-800 mt-2">${escapeHtml(invNumber)}</div>
+          <div class="text-[11px] text-slate-500">Date: ${escapeHtml(formatDate(inc.paymentDate))}</div>
         </div>
       </div>
 
@@ -4557,17 +4953,17 @@ function generateInvoiceCardHTML(inc) {
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs pt-1">
         <div class="p-3 rounded-lg bg-slate-50 border border-slate-200/80 space-y-1">
           <span class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">Billed To (Client):</span>
-          <div class="text-sm font-bold text-slate-900">${inc.clientName}</div>
-          <div class="text-slate-600">Associated Project: <strong class="text-slate-900">${inc.projectName}</strong></div>
-          <div class="text-slate-500 text-[11px]">Revenue Category: ${inc.source || 'Client Inflow'}</div>
-          ${inc.createdBy ? `<div class="text-[10px] text-slate-400">Enrolled By: ${inc.createdBy}</div>` : ''}
+          <div class="text-sm font-bold text-slate-900">${escapeHtml(inc.clientName)}</div>
+          <div class="text-slate-600">Associated Project: <strong class="text-slate-900">${escapeHtml(inc.projectName)}</strong></div>
+          <div class="text-slate-500 text-[11px]">Revenue Category: ${escapeHtml(inc.source || 'Client Inflow')}</div>
+          ${inc.createdBy ? `<div class="text-[10px] text-slate-400">Enrolled By: ${escapeHtml(inc.createdBy)}</div>` : ''}
         </div>
         <div class="p-3 rounded-lg bg-slate-50 border border-slate-200/80 space-y-1 sm:text-right">
-          <span class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">Authorization & Clearance:</span>
-          <div class="text-slate-700">Payment Channel: <strong class="uppercase font-mono text-slate-900">${inc.paymentMethod || 'Bank Transfer'}</strong></div>
+          <span class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">Authorization &amp; Clearance:</span>
+          <div class="text-slate-700">Payment Channel: <strong class="uppercase font-mono text-slate-900">${escapeHtml((inc.paymentMethod || 'Bank Transfer').replace(/_/g, ' '))}</strong></div>
           <div class="text-slate-700">Clearance Status: <strong class="text-emerald-700">Direct Inflow Confirmed</strong></div>
-          <div class="text-slate-700">Approval Stamp: <strong class="text-slate-900">${approvalDate}</strong></div>
-          <div class="text-[11px] text-slate-500">Authorized By: <strong class="text-slate-900">${approver}</strong></div>
+          <div class="text-slate-700">Approval Stamp: <strong class="text-slate-900">${escapeHtml(approvalDate)}</strong></div>
+          <div class="text-[11px] text-slate-500">Authorized By: <strong class="text-slate-900">${escapeHtml(approver)}</strong></div>
         </div>
       </div>
 
@@ -4584,10 +4980,10 @@ function generateInvoiceCardHTML(inc) {
           <tbody class="divide-y divide-slate-100">
             <tr>
               <td class="py-3 px-3">
-                <div class="font-bold text-slate-900">${inc.projectName} - Client Revenue Deliverable</div>
-                <div class="text-[11px] text-slate-500 mt-0.5">${inc.notes || 'Recorded and verified client contract milestone revenue.'}</div>
+                <div class="font-bold text-slate-900">${escapeHtml(inc.projectName)} - Client Revenue Deliverable</div>
+                <div class="text-[11px] text-slate-500 mt-0.5">${escapeHtml(inc.notes || 'Recorded and verified client contract milestone revenue.')}</div>
               </td>
-              <td class="py-3 px-3 text-center font-mono font-medium text-slate-600">${inc.projectId || 'PRJ'}</td>
+              <td class="py-3 px-3 text-center font-mono font-medium text-slate-600">${escapeHtml(inc.projectId || 'PRJ')}</td>
               <td class="py-3 px-3 text-right font-mono font-bold text-[#026047] text-sm">${formatINR(inc.amount)}</td>
             </tr>
           </tbody>
@@ -4610,7 +5006,7 @@ function generateInvoiceCardHTML(inc) {
           <div class="p-2 px-3 rounded-lg border-2 border-dashed border-[#026047]/40 bg-[#026047]/5 text-center inline-block">
             <div class="text-[9px] uppercase font-mono font-bold text-[#026047] tracking-wider">✓ DIGITALLY AUTHORIZED</div>
             <div class="text-xs font-black text-slate-900 tracking-wide">PRANAV BANSODE</div>
-            <div class="text-[9px] text-slate-500 font-semibold">Founder & Director</div>
+            <div class="text-[9px] text-slate-500 font-semibold">Founder &amp; Director</div>
           </div>
           <span class="text-[9px] text-slate-400 mt-1 block">Phoenix Tech Solutions Private Limited</span>
         </div>
@@ -4620,8 +5016,13 @@ function generateInvoiceCardHTML(inc) {
 }
 
 window.openInvoiceModal = function (id) {
-  const inc = STATE.income.find((i) => i.id === id);
+  if (!requireAuth('view official invoices')) return;
+  const inc = (STATE.income || []).find((i) => i.id === id);
   if (!inc) return;
+  if (inc.status !== 'received') {
+    showToast('Official invoice can only be generated after Founder approval clears the payment.');
+    return;
+  }
 
   STATE.currentInvoiceId = id;
   const container = document.getElementById('invoice-render-content');
@@ -4639,9 +5040,10 @@ window.closeInvoiceModal = function () {
 };
 
 window.printCurrentInvoice = function () {
+  if (!requireAuth('print invoices')) return;
   if (!STATE.currentInvoiceId) return;
-  const inc = STATE.income.find((i) => i.id === STATE.currentInvoiceId);
-  if (!inc) return;
+  const inc = (STATE.income || []).find((i) => i.id === STATE.currentInvoiceId);
+  if (!inc || inc.status !== 'received') return;
 
   const invoiceBody = generateInvoiceCardHTML(inc);
   const printWin = window.open('', '_blank', 'width=850,height=950');
@@ -4653,7 +5055,7 @@ window.printCurrentInvoice = function () {
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Invoice - ${inc.clientName}</title>
+  <title>Invoice - ${escapeHtml(inc.clientName)}</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
@@ -4676,9 +5078,10 @@ window.printCurrentInvoice = function () {
 };
 
 window.downloadCurrentInvoice = function () {
+  if (!requireAuth('download invoices')) return;
   if (!STATE.currentInvoiceId) return;
-  const inc = STATE.income.find((i) => i.id === STATE.currentInvoiceId);
-  if (!inc) return;
+  const inc = (STATE.income || []).find((i) => i.id === STATE.currentInvoiceId);
+  if (!inc || inc.status !== 'received') return;
 
   const invoiceBody = generateInvoiceCardHTML(inc);
   const fullHtml = `<!DOCTYPE html>
@@ -4686,7 +5089,7 @@ window.downloadCurrentInvoice = function () {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Invoice - ${inc.clientName} - ${inc.id}</title>
+  <title>Invoice - ${escapeHtml(inc.clientName)} - ${escapeHtml(inc.id)}</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
@@ -4715,7 +5118,7 @@ window.downloadCurrentInvoice = function () {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `Invoice-${inc.clientName.replace(/[^a-zA-Z0-9]/g, '_')}-${inc.id}.html`;
+  a.download = `Invoice-${inc.clientName.replace(/[^a-zA-Z0-9]/g, '_')}-${safeId(inc.id)}.html`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -4724,45 +5127,77 @@ window.downloadCurrentInvoice = function () {
 };
 
 window.approveIncome = function (id) {
-  if (STATE.activeRole !== 'pranav') {
-    alert('Restricted: Only Pranav Bansode (Founder / Director) has authorization to approve income entries.');
+  if (!requireFounder('approve client inflows')) return;
+  const inc = (STATE.income || []).find((i) => i.id === id);
+  if (!inc) return;
+  if (inc.status === 'received') {
+    showToast(`Income from ${inc.clientName} is already verified.`);
     return;
   }
-  const inc = STATE.income.find((i) => i.id === id);
-  if (!inc) return;
 
   inc.status = 'received';
   inc.approvedBy = 'Pranav Bansode (Founder / Director)';
   inc.approvedAt = new Date().toISOString().replace('T', ' ').slice(0, 16);
 
-  const prj = STATE.projects.find((p) => p.id === inc.projectId);
+  const prj = (STATE.projects || []).find((p) => p.id === inc.projectId);
   if (prj) {
-    prj.revenueReceived += inc.amount;
+    prj.revenueReceived = (prj.revenueReceived || 0) + (Number(inc.amount) || 0);
   }
 
-  STATE.auditLogs.unshift({
-    id: 'log-' + Date.now(),
-    action: 'APPROVE_INCOME',
-    details: `Approved income of ${formatINR(inc.amount)} from ${inc.clientName} (${inc.projectName})`,
-    performedBy: 'Pranav Bansode (Founder / Director)',
-    date: new Date().toISOString().replace('T', ' ').slice(0, 16),
-  });
+  recordAuditLog(
+    'APPROVE_INCOME',
+    `Approved income of ${formatINR(inc.amount)} from ${inc.clientName} (${inc.projectName})`,
+    'Pranav Bansode (Founder / Director)'
+  );
+  saveAppStateToStorage();
 
   renderIncome();
   renderDashboard();
   renderProjects();
+  if (STATE.currentTab === 'sales-done') renderSalesDone();
+  if (STATE.currentTab === 'approvals') renderApprovals();
   renderReports();
+  renderSidebarNav(STATE.currentTab);
   showToast(`Income of ${formatINR(inc.amount)} approved by Founder/Director. Available Company Cash updated!`);
 
-  // Immediate option to view and download official invoice
   setTimeout(() => {
     openInvoiceModal(inc.id);
-  }, 350);
+  }, 250);
+};
+
+window.rejectIncome = function (id) {
+  if (!requireFounder('reject client inflows')) return;
+  const inc = (STATE.income || []).find((i) => i.id === id);
+  if (!inc || inc.status === 'rejected') return;
+
+  if (inc.status === 'received' && inc.projectId) {
+    const prj = (STATE.projects || []).find((p) => p.id === inc.projectId);
+    if (prj) prj.revenueReceived = Math.max(0, (prj.revenueReceived || 0) - (Number(inc.amount) || 0));
+  }
+
+  inc.status = 'rejected';
+  inc.rejectedBy = 'Pranav Bansode (Founder / Director)';
+
+  recordAuditLog(
+    'REJECT_INCOME',
+    `Rejected client inflow ${formatINR(inc.amount)} from ${inc.clientName} (${inc.projectName})`,
+    'Pranav Bansode (Founder / Director)'
+  );
+  saveAppStateToStorage();
+
+  renderDashboard();
+  renderProjects();
+  if (STATE.currentTab === 'sales-done') renderSalesDone();
+  if (STATE.currentTab === 'approvals') renderApprovals();
+  renderReports();
+  renderSidebarNav(STATE.currentTab);
+  showToast(`Inflow entry for ${inc.clientName} rejected.`);
 };
 
 window.markIncomeReceived = window.approveIncome;
 
 window.openNewIncomeModal = function () {
+  if (!requireAuth('enroll client inflows')) return;
   const modal = document.getElementById('modal-new-income');
   if (modal) modal.classList.remove('hidden');
 };
@@ -4773,27 +5208,29 @@ window.closeNewIncomeModal = function () {
 };
 
 window.submitNewIncome = function () {
-  const client = document.getElementById('inc-client').value.trim();
-  const project = document.getElementById('inc-project').value;
-  const amount = parseFloat(document.getElementById('inc-amount').value) || 0;
-  const method = document.getElementById('inc-method').value;
+  if (!requireAuth('submit client inflows')) return;
+  const clientEl = document.getElementById('inc-client');
+  const projectEl = document.getElementById('inc-project');
+  const amountEl = document.getElementById('inc-amount');
+  const methodEl = document.getElementById('inc-method');
 
-  if (!client || amount <= 0) return alert('Valid client name and positive amount are required.');
+  const client = clientEl ? clientEl.value.trim() : '';
+  const project = projectEl ? projectEl.value : '';
+  const amount = parseFloat(amountEl ? amountEl.value : '0');
+  const method = methodEl ? methodEl.value : 'bank_transfer';
 
-  const prjObj = STATE.projects.find((p) => p.id === project) || STATE.projects[0];
-  const userMap = {
-    pranav: 'Pranav Bansode (Founder / Director)',
-    arshad: 'Arshad Shaikh (Co-Founder)',
-    vivek: 'Vivek Gajdhane (Technical)',
-    aryan: 'Aryan Bhore (Research Lead)',
-  };
-  const enrolledBy = userMap[STATE.activeRole] || 'Team Member';
+  if (!client || !Number.isFinite(amount) || amount <= 0) {
+    return alert('Valid client name and positive amount are required.');
+  }
+
+  const prjObj = (STATE.projects || []).find((p) => p.id === project) || (STATE.projects || [])[0];
+  const enrolledBy = MEMBER_NAME_MAP[getCurrentMemberId()] || 'Team Member';
 
   STATE.income.unshift({
     id: 'inc-' + Date.now(),
     source: 'Client Inflow',
-    projectId: prjObj.id,
-    projectName: prjObj.name,
+    projectId: prjObj ? prjObj.id : 'prj-leadx',
+    projectName: prjObj ? prjObj.name : 'LeadX',
     clientName: client,
     amount,
     paymentDate: new Date().toISOString().split('T')[0],
@@ -4803,22 +5240,24 @@ window.submitNewIncome = function () {
     notes: `Enrolled by ${enrolledBy}. Awaiting Founder/Director approval.`,
   });
 
-  STATE.auditLogs.unshift({
-    id: 'log-' + Date.now(),
-    action: 'ENROLL_INCOME',
-    details: `Enrolled income ${formatINR(amount)} from ${client} for ${prjObj.name} (Pending Approval)`,
-    performedBy: enrolledBy,
-    date: new Date().toISOString().replace('T', ' ').slice(0, 16),
-  });
+  recordAuditLog(
+    'ENROLL_INCOME',
+    `Enrolled income ${formatINR(amount)} from ${client} for ${prjObj ? prjObj.name : 'Company'} (Pending Approval)`,
+    enrolledBy
+  );
+  saveAppStateToStorage();
 
   closeNewIncomeModal();
-  document.getElementById('inc-client').value = '';
-  document.getElementById('inc-amount').value = '';
+  if (clientEl) clientEl.value = '';
+  if (amountEl) amountEl.value = '';
 
   renderIncome();
   renderDashboard();
   renderProjects();
+  if (STATE.currentTab === 'sales-done') renderSalesDone();
+  if (STATE.currentTab === 'approvals') renderApprovals();
   renderReports();
+  renderSidebarNav(STATE.currentTab);
   showToast(`Income of ${formatINR(amount)} enrolled! Requires approval by Founder/Director before cash is credited.`);
 };
 
@@ -4839,7 +5278,7 @@ function formatExpenseCategory(cat) {
     direct_project_cost: 'Direct Project Cost',
     other: 'Other',
   };
-  return map[cat] || cat;
+  return map[cat] || escapeHtml(cat || 'Other');
 }
 
 function renderExpenseManagement() {
@@ -4852,37 +5291,40 @@ function renderExpenseManagement() {
   const selectedProject = projectFilter ? projectFilter.value : 'ALL';
   const selectedStatus = statusFilter ? statusFilter.value : 'ALL';
 
-  let list = STATE.expenses.filter((e) => {
-    if (selectedProject !== 'ALL' && e.projectId !== selectedProject.toLowerCase()) {
+  const dateScopedExpenses = (STATE.expenses || []).filter((e) => matchesDateFilter(e.date));
+
+  let list = dateScopedExpenses.filter((e) => {
+    if (selectedProject === 'GENERAL') {
+      if (e.projectId) return false;
+    } else if (selectedProject !== 'ALL' && e.projectId !== selectedProject) {
       return false;
     }
     if (selectedStatus === 'PENDING' && e.status !== 'pending_approval') return false;
     if (selectedStatus === 'APPROVED' && e.status !== 'approved') return false;
+    if (selectedStatus === 'REJECTED' && e.status !== 'rejected') return false;
+    if (selectedStatus === 'REVERSED' && e.status !== 'reversed') return false;
     return true;
   });
 
-  // Role-based filtering:
-  // Pranav (Founder) sees all company expenses.
-  // Arshad sees only marketing expenses submitted by Arshad.
-  // Vivek sees only engineering/infrastructure expenses submitted by Vivek.
+  // Role-based scoping: Founder sees all; team members see their own expenses.
   if (currentRole === 'arshad') {
-    list = list.filter((e) => e.paidBy.toLowerCase().includes('arshad'));
+    list = list.filter((e) => (e.paidBy || '').toLowerCase().includes('arshad'));
   } else if (currentRole === 'vivek') {
-    list = list.filter((e) => e.paidBy.toLowerCase().includes('vivek'));
+    list = list.filter((e) => (e.paidBy || '').toLowerCase().includes('vivek'));
   } else if (currentRole === 'aryan') {
-    list = list.filter((e) => e.paidBy.toLowerCase().includes('aryan'));
+    list = list.filter((e) => (e.paidBy || '').toLowerCase().includes('aryan'));
   }
 
   // 1. Expense Summary Metrics Cards
   if (metricsContainer) {
     if (currentRole === 'pranav') {
-      const approvedTotal = STATE.expenses
+      const approvedTotal = dateScopedExpenses
         .filter((e) => e.status === 'approved')
-        .reduce((sum, e) => sum + e.amount, 0);
-      const pendingCount = STATE.expenses.filter((e) => e.status === 'pending_approval').length;
-      const leadXExp = STATE.expenses
+        .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+      const pendingCount = dateScopedExpenses.filter((e) => e.status === 'pending_approval').length;
+      const leadXExp = dateScopedExpenses
         .filter((e) => e.projectId === 'prj-leadx' && e.status === 'approved')
-        .reduce((sum, e) => sum + e.amount, 0);
+        .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 
       metricsContainer.innerHTML = `
         <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
@@ -4898,68 +5340,56 @@ function renderExpenseManagement() {
         <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
           <span class="text-xs text-slate-400 font-medium">LeadX Direct Cost Allocation</span>
           <div class="text-xl font-bold text-slate-900 dark:text-white">${formatINR(leadXExp)}</div>
-          <div class="text-[11px] text-slate-500 pt-0.5">Cluster & scraper infrastructure</div>
-        </div>
-      `;
-    } else if (currentRole === 'arshad') {
-      const myExpenses = STATE.expenses.filter((e) => e.paidBy.toLowerCase().includes('arshad'));
-      const approved = myExpenses.filter((e) => e.status === 'approved').reduce((s, e) => s + e.amount, 0);
-      const pending = myExpenses.filter((e) => e.status === 'pending_approval').reduce((s, e) => s + e.amount, 0);
-
-      metricsContainer.innerHTML = `
-        <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
-          <span class="text-xs text-slate-400 font-medium">My Submitted Marketing Expenses</span>
-          <div class="text-xl font-bold text-slate-900 dark:text-white">${formatINR(approved + pending)}</div>
-          <div class="text-[11px] text-slate-500 pt-0.5">B2B funnels & pilot collateral</div>
-        </div>
-        <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
-          <span class="text-xs text-slate-400 font-medium">Approved by Founder Pranav</span>
-          <div class="text-xl font-bold text-emerald-600 dark:text-emerald-400">${formatINR(approved)}</div>
-          <div class="text-[11px] text-slate-500 pt-0.5">Cleared corporate disbursements</div>
-        </div>
-        <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
-          <span class="text-xs text-slate-400 font-medium">Awaiting Founder Approval</span>
-          <div class="text-xl font-bold text-amber-600 dark:text-amber-400">${formatINR(pending)}</div>
-          <div class="text-[11px] text-slate-500 pt-0.5">Pending Director clearance</div>
-        </div>
-      `;
-    } else if (currentRole === 'aryan') {
-      const myExpenses = STATE.expenses.filter((e) => e.paidBy.toLowerCase().includes('aryan'));
-      const approved = myExpenses.filter((e) => e.status === 'approved').reduce((s, e) => s + e.amount, 0);
-      const pending = myExpenses.filter((e) => e.status === 'pending_approval').reduce((s, e) => s + e.amount, 0);
-
-      metricsContainer.innerHTML = `
-        <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
-          <span class="text-xs text-slate-400 font-medium">My Research & Outreach Outflows</span>
-          <div class="text-xl font-bold text-slate-900 dark:text-white">${formatINR(approved + pending)}</div>
-          <div class="text-[11px] text-slate-500 pt-0.5">Client prospect discovery & travel</div>
-        </div>
-        <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
-          <span class="text-xs text-slate-400 font-medium">Approved by Founder Pranav</span>
-          <div class="text-xl font-bold text-emerald-600 dark:text-emerald-400">${formatINR(approved)}</div>
-          <div class="text-[11px] text-slate-500 pt-0.5">Reconciled research disbursements</div>
-        </div>
-        <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
-          <span class="text-xs text-slate-400 font-medium">Awaiting Founder Approval</span>
-          <div class="text-xl font-bold text-amber-600 dark:text-amber-400">${formatINR(pending)}</div>
-          <div class="text-[11px] text-slate-500 pt-0.5">Pending Director clearance</div>
+          <div class="text-[11px] text-slate-500 pt-0.5">Cluster &amp; scraper infrastructure</div>
         </div>
       `;
     } else {
-      const myExpenses = STATE.expenses.filter((e) => e.paidBy.toLowerCase().includes('vivek'));
-      const approved = myExpenses.filter((e) => e.status === 'approved').reduce((s, e) => s + e.amount, 0);
-      const pending = myExpenses.filter((e) => e.status === 'pending_approval').reduce((s, e) => s + e.amount, 0);
+      const roleMeta = {
+        arshad: {
+          key: 'arshad',
+          submittedLabel: 'My Submitted Marketing Expenses',
+          submittedSub: 'B2B funnels &amp; pilot collateral',
+          approvedSub: 'Cleared corporate disbursements',
+        },
+        aryan: {
+          key: 'aryan',
+          submittedLabel: 'My Research &amp; Outreach Outflows',
+          submittedSub: 'Client prospect discovery &amp; travel',
+          approvedSub: 'Reconciled research disbursements',
+        },
+        vivek: {
+          key: 'vivek',
+          submittedLabel: 'My Technical Infrastructure Outflows',
+          submittedSub: 'AWS, database &amp; developer tooling',
+          approvedSub: 'Authorized server billing',
+        },
+      }[currentRole] || {
+        key: currentRole,
+        submittedLabel: 'My Submitted Expenses',
+        submittedSub: 'Operational expenses',
+        approvedSub: 'Cleared disbursements',
+      };
+
+      const myExpenses = dateScopedExpenses.filter((e) =>
+        (e.paidBy || '').toLowerCase().includes(roleMeta.key)
+      );
+      const approved = myExpenses
+        .filter((e) => e.status === 'approved')
+        .reduce((s, e) => s + (Number(e.amount) || 0), 0);
+      const pending = myExpenses
+        .filter((e) => e.status === 'pending_approval')
+        .reduce((s, e) => s + (Number(e.amount) || 0), 0);
 
       metricsContainer.innerHTML = `
         <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
-          <span class="text-xs text-slate-400 font-medium">My Technical Infrastructure Outflows</span>
+          <span class="text-xs text-slate-400 font-medium">${roleMeta.submittedLabel}</span>
           <div class="text-xl font-bold text-slate-900 dark:text-white">${formatINR(approved + pending)}</div>
-          <div class="text-[11px] text-slate-500 pt-0.5">AWS, database & developer tooling</div>
+          <div class="text-[11px] text-slate-500 pt-0.5">${roleMeta.submittedSub}</div>
         </div>
         <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
           <span class="text-xs text-slate-400 font-medium">Approved by Founder Pranav</span>
           <div class="text-xl font-bold text-emerald-600 dark:text-emerald-400">${formatINR(approved)}</div>
-          <div class="text-[11px] text-slate-500 pt-0.5">Authorized server billing</div>
+          <div class="text-[11px] text-slate-500 pt-0.5">${roleMeta.approvedSub}</div>
         </div>
         <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
           <span class="text-xs text-slate-400 font-medium">Awaiting Founder Approval</span>
@@ -4978,146 +5408,177 @@ function renderExpenseManagement() {
     }
 
     tableBody.innerHTML = list
-      .map(
-        (exp) => `
+      .map((exp) => {
+        const expId = safeId(exp.id);
+        let statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">⏳ Pending Approval</span>`;
+        if (exp.status === 'approved') {
+          statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">✓ Approved</span>`;
+        } else if (exp.status === 'rejected') {
+          statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300">✕ Rejected</span>`;
+        } else if (exp.status === 'reversed') {
+          statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300">↺ Reversed</span>`;
+        }
+
+        let actionCell = `<span class="text-amber-600 dark:text-amber-400 text-[11px] font-medium">Pending Founder Sign-off</span>`;
+        if (currentRole === 'pranav') {
+          if (exp.status === 'approved') {
+            actionCell = `
+              <div class="flex items-center justify-end gap-1.5">
+                <span class="text-[10px] text-slate-400">Authorized</span>
+                <button onclick="reverseExpense('${expId}')" class="px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 hover:bg-rose-100 dark:hover:bg-rose-950 text-slate-600 hover:text-rose-700 text-[10px] font-bold transition" title="Reverse this expense with audit reason">
+                  Reverse
+                </button>
+              </div>`;
+          } else if (exp.status === 'pending_approval') {
+            actionCell = `
+              <div class="flex items-center justify-end gap-1.5">
+                <button onclick="approveExpense('${expId}')" class="px-2.5 py-1 rounded-lg bg-[#026047] hover:bg-[#024d39] text-[#fffde8] text-xs font-bold shadow-sm transition">
+                  👑 Approve
+                </button>
+                <button onclick="rejectExpense('${expId}')" class="px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 text-xs font-bold transition">
+                  ✕ Reject
+                </button>
+              </div>`;
+          } else {
+            actionCell = `<span class="text-[11px] text-slate-400 italic">${exp.status === 'rejected' ? 'Rejected' : 'Reversed'}</span>`;
+          }
+        } else if (exp.status === 'approved') {
+          actionCell = `<span class="text-emerald-600 dark:text-emerald-400 font-semibold text-[11px]">✓ Approved by Founder Pranav</span>`;
+        } else if (exp.status === 'rejected') {
+          actionCell = `<span class="text-rose-600 dark:text-rose-400 text-[11px] font-medium">✕ Rejected by Founder</span>`;
+        } else if (exp.status === 'reversed') {
+          actionCell = `<span class="text-slate-500 text-[11px] font-medium">↺ Entry Reversed</span>`;
+        }
+
+        return `
       <tr class="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition">
-        <td class="py-3 px-3 font-mono text-slate-500">${formatDate(exp.date)}</td>
+        <td class="py-3 px-3 font-mono text-slate-500">${escapeHtml(formatDate(exp.date))}</td>
         <td class="py-3 px-3 font-semibold text-slate-900 dark:text-white">
           <div class="flex items-center gap-1.5">
-            <span>${exp.paidBy}</span>
+            <span>${escapeHtml(exp.paidBy)}</span>
           </div>
         </td>
         <td class="py-3 px-3">
-          <div class="font-bold text-slate-800 dark:text-slate-200">${exp.title}</div>
-          <div class="text-[11px] text-slate-400">${exp.description}</div>
+          <div class="font-bold text-slate-800 dark:text-slate-200">${escapeHtml(exp.title)}</div>
+          <div class="text-[11px] text-slate-400">${escapeHtml(exp.description)}</div>
         </td>
         <td class="py-3 px-3">
           <span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-            ${exp.projectName || 'General'}
+            ${escapeHtml(exp.projectName || 'General')}
           </span>
         </td>
         <td class="py-3 px-3 text-right font-black text-rose-600 dark:text-rose-400">
           ${formatINR(exp.amount)}
         </td>
         <td class="py-3 px-3 text-center">
-          ${
-            exp.status === 'approved'
-              ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">✓ Approved</span>`
-              : `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">⏳ Pending Approval</span>`
-          }
+          ${statusBadge}
         </td>
-        <td class="py-3 px-3 text-right">
-          ${
-            currentRole === 'pranav'
-              ? exp.status === 'approved'
-                ? `<div class="flex items-center justify-end gap-1.5">
-                    <span class="text-[10px] text-slate-400">Authorized</span>
-                    <button onclick="reverseExpense('${exp.id}')" class="px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 hover:bg-rose-100 dark:hover:bg-rose-950 text-slate-600 hover:text-rose-700 text-[10px] font-bold transition" title="Reverse this expense with audit reason">
-                      Reverse
-                    </button>
-                  </div>`
-                : `<button onclick="approveExpense('${exp.id}')" class="px-2.5 py-1 rounded-lg bg-[#026047] hover:bg-[#024d39] text-[#fffde8] text-xs font-bold shadow-sm transition">
-                    👑 Approve
-                  </button>`
-              : exp.status === 'approved'
-              ? `<span class="text-emerald-600 dark:text-emerald-400 font-semibold text-[11px]">✓ Approved by Founder Pranav</span>`
-              : `<span class="text-amber-600 dark:text-amber-400 text-[11px] font-medium">Pending Founder Sign-off</span>`
-          }
+        <td class="py-3 px-3 text-right whitespace-nowrap">
+          ${actionCell}
         </td>
       </tr>
-    `
-      )
+    `;
+      })
       .join('');
   }
 }
 window.renderExpenseManagement = renderExpenseManagement;
 
 window.approveExpense = function (id) {
-  if (STATE.activeRole !== 'pranav') {
-    alert('Security Gate: Only Pranav Bansode (Founder / Director) has authorization to approve company expenses.');
+  if (!requireFounder('approve company expenses')) return;
+  const exp = (STATE.expenses || []).find((e) => e.id === id);
+  if (!exp) return;
+  if (exp.status === 'approved') {
+    showToast(`Expense "${exp.title}" is already approved.`);
     return;
   }
-  const exp = STATE.expenses.find((e) => e.id === id);
-  if (!exp) return;
 
   exp.status = 'approved';
   exp.approvedBy = 'Pranav Bansode (Founder / Director)';
+  exp.approvedAt = new Date().toISOString().split('T')[0];
 
   if (exp.projectId) {
-    const prj = STATE.projects.find((p) => p.id === exp.projectId);
-    if (prj) prj.directExpenses += exp.amount;
+    const prj = (STATE.projects || []).find((p) => p.id === exp.projectId);
+    if (prj) prj.directExpenses = (prj.directExpenses || 0) + (Number(exp.amount) || 0);
   }
 
-  STATE.auditLogs.unshift({
-    id: 'log-' + Date.now(),
-    action: 'APPROVE_EXPENSE',
-    details: `Approved ${exp.title} (${formatINR(exp.amount)}) by ${exp.paidBy}`,
-    performedBy: 'Pranav Bansode (Founder / Director)',
-    date: new Date().toISOString().replace('T', ' ').slice(0, 16),
-  });
+  recordAuditLog(
+    'APPROVE_EXPENSE',
+    `Approved ${exp.title} (${formatINR(exp.amount)}) by ${exp.paidBy}`,
+    'Pranav Bansode (Founder / Director)'
+  );
+  saveAppStateToStorage();
 
   renderExpenses();
   renderDashboard();
   renderProjects();
   renderReports();
+  renderSidebarNav(STATE.currentTab);
   showToast(`Expense ${exp.title} approved! Interconnected Dashboard updated.`);
 };
 
 window.rejectExpense = function (id) {
-  if (STATE.activeRole !== 'pranav') {
-    alert('Security Gate: Only Pranav Bansode (Founder / Director) has authorization to reject company expenses.');
-    return;
+  if (!requireFounder('reject company expenses')) return;
+  const exp = (STATE.expenses || []).find((e) => e.id === id);
+  if (!exp || exp.status === 'rejected' || exp.status === 'reversed') return;
+
+  if (exp.status === 'approved' && exp.projectId) {
+    const prj = (STATE.projects || []).find((p) => p.id === exp.projectId);
+    if (prj) prj.directExpenses = Math.max(0, (prj.directExpenses || 0) - (Number(exp.amount) || 0));
   }
-  const exp = STATE.expenses.find((e) => e.id === id);
-  if (!exp) return;
 
   exp.status = 'rejected';
   exp.rejectedBy = 'Pranav Bansode (Founder / Director)';
 
-  STATE.auditLogs.unshift({
-    id: 'log-' + Date.now(),
-    action: 'REJECT_EXPENSE',
-    details: `Rejected ${exp.title} (${formatINR(exp.amount)}) submitted by ${exp.paidBy}`,
-    performedBy: 'Pranav Bansode (Founder / Director)',
-    date: new Date().toISOString().replace('T', ' ').slice(0, 16),
-  });
+  recordAuditLog(
+    'REJECT_EXPENSE',
+    `Rejected ${exp.title} (${formatINR(exp.amount)}) submitted by ${exp.paidBy}`,
+    'Pranav Bansode (Founder / Director)'
+  );
+  saveAppStateToStorage();
 
   renderExpenses();
   renderDashboard();
+  renderProjects();
+  renderReports();
+  renderSidebarNav(STATE.currentTab);
   showToast(`Expense ${exp.title} rejected.`);
 };
 
 window.reverseExpense = function (id) {
-  if (STATE.activeRole !== 'pranav') {
-    alert('Security Gate: Only Pranav Bansode (Founder / Director) has authorization to reverse company expenses.');
-    return;
-  }
+  if (!requireFounder('reverse company expenses')) return;
+  const exp = (STATE.expenses || []).find((e) => e.id === id);
+  if (!exp || exp.status !== 'approved') return;
+
   const reason = prompt('FINANCIAL AUDIT: State reason for reversing this approved expense:');
   if (!reason || !reason.trim()) return alert('Reversal cancelled: Audit reason required.');
 
-  const idx = STATE.expenses.findIndex((e) => e.id === id);
-  if (idx !== -1) {
-    const exp = STATE.expenses[idx];
-    exp.status = 'reversed';
-    exp.isReversal = true;
+  exp.status = 'reversed';
+  exp.isReversal = true;
+  exp.reversalReason = reason.trim();
 
-    STATE.auditLogs.unshift({
-      id: 'log-' + Date.now(),
-      action: 'REVERSE_EXPENSE',
-      details: `Reversed ${exp.title} (${formatINR(exp.amount)}) - Reason: ${reason}`,
-      performedBy: 'Pranav Bansode',
-      date: new Date().toISOString().replace('T', ' ').slice(0, 16),
-    });
-
-    renderExpenses();
-    renderDashboard();
-    renderProjects();
-    renderReports();
-    showToast(`Expense reversed and logged. Dashboard updated.`);
+  if (exp.projectId) {
+    const prj = (STATE.projects || []).find((p) => p.id === exp.projectId);
+    if (prj) prj.directExpenses = Math.max(0, (prj.directExpenses || 0) - (Number(exp.amount) || 0));
   }
+
+  recordAuditLog(
+    'REVERSE_EXPENSE',
+    `Reversed ${exp.title} (${formatINR(exp.amount)}) - Reason: ${reason.trim()}`,
+    'Pranav Bansode (Founder / Director)'
+  );
+  saveAppStateToStorage();
+
+  renderExpenses();
+  renderDashboard();
+  renderProjects();
+  renderReports();
+  renderSidebarNav(STATE.currentTab);
+  showToast('Expense reversed and logged. Dashboard updated.');
 };
 
 window.openNewExpenseModal = function () {
+  if (!requireAuth('record company expenses')) return;
   const modal = document.getElementById('modal-new-expense');
   if (modal) modal.classList.remove('hidden');
 };
@@ -5128,22 +5589,29 @@ window.closeNewExpenseModal = function () {
 };
 
 window.submitNewExpense = function () {
-  const title = document.getElementById('exp-title').value;
-  const category = document.getElementById('exp-category').value;
-  const project = document.getElementById('exp-project').value;
-  const amount = parseFloat(document.getElementById('exp-amount').value) || 0;
-  const desc = document.getElementById('exp-desc').value;
+  if (!requireAuth('submit company expenses')) return;
+  const titleEl = document.getElementById('exp-title');
+  const categoryEl = document.getElementById('exp-category');
+  const projectEl = document.getElementById('exp-project');
+  const amountEl = document.getElementById('exp-amount');
+  const descEl = document.getElementById('exp-desc');
 
-  if (!title || amount <= 0) return alert('Valid title and amount required.');
+  const title = titleEl ? titleEl.value.trim() : '';
+  const category = categoryEl ? categoryEl.value : 'other';
+  const project = projectEl ? projectEl.value : 'GENERAL';
+  const amount = parseFloat(amountEl ? amountEl.value : '0');
+  const desc = descEl ? descEl.value.trim() : '';
 
-  let paidBy = 'Pranav Bansode';
-  if (STATE.activeRole === 'arshad') paidBy = 'Arshad Shaikh';
-  if (STATE.activeRole === 'vivek') paidBy = 'Vivek Gajdhane';
-  if (STATE.activeRole === 'aryan') paidBy = 'Aryan Bhore';
+  if (!title || !Number.isFinite(amount) || amount <= 0) {
+    return alert('Valid expense title and positive amount required.');
+  }
 
-  const prjObj = STATE.projects.find((p) => p.id === project) || null;
+  const paidBy = MEMBER_NAME_MAP[getCurrentMemberId()] || 'Team Member';
+  const prjObj =
+    project && project !== 'GENERAL'
+      ? (STATE.projects || []).find((p) => p.id === project) || null
+      : null;
 
-  // Auto-approve if Founder, else pending
   const isAutoApproved = STATE.activeRole === 'pranav';
 
   STATE.expenses.unshift({
@@ -5157,19 +5625,295 @@ window.submitNewExpense = function () {
     paidBy,
     description: desc || 'Company operational expense.',
     status: isAutoApproved ? 'approved' : 'pending_approval',
-    approvedBy: isAutoApproved ? 'Pranav Bansode' : null,
+    approvedBy: isAutoApproved ? 'Pranav Bansode (Founder / Director)' : null,
   });
 
   if (isAutoApproved && prjObj) {
-    prjObj.directExpenses += amount;
+    prjObj.directExpenses = (prjObj.directExpenses || 0) + amount;
   }
+
+  recordAuditLog(
+    isAutoApproved ? 'APPROVE_EXPENSE' : 'SUBMIT_EXPENSE',
+    `${paidBy} logged expense "${title}" (${formatINR(amount)}) for ${prjObj ? prjObj.name : 'Company General'} (${isAutoApproved ? 'Approved' : 'Pending Approval'})`,
+    paidBy
+  );
+  saveAppStateToStorage();
+
+  if (titleEl) titleEl.value = '';
+  if (amountEl) amountEl.value = '';
+  if (descEl) descEl.value = '';
 
   closeNewExpenseModal();
   renderExpenses();
   renderDashboard();
   renderProjects();
   renderReports();
+  renderSidebarNav(STATE.currentTab);
   showToast(isAutoApproved ? 'Expense approved and recorded. Dashboard updated.' : 'Expense submitted for Founder approval.');
+};
+
+// ==============================================================================
+// E. FINANCIAL SUMMARY, RESERVES & EXECUTIVE AUDIT LOG
+// ==============================================================================
+function renderFinancialSummary() {
+  if (STATE.activeRole !== 'pranav') return;
+
+  const kpisEl = document.getElementById('financial-summary-kpis');
+  const pnlEl = document.getElementById('project-wise-pnl-container');
+  const monthlyEl = document.getElementById('monthly-performance-container');
+  const reservesEl = document.getElementById('reserves-breakdown-container');
+  const auditEl = document.getElementById('audit-logs-container');
+
+  const m = calculateMetrics();
+  const totalDisbursements = m.totalBusinessExpenses + m.teamSalariesPaid + m.founderDrawingsTotal;
+  const marginPct =
+    m.totalMoneyReceived > 0 ? ((m.netBusinessProfit / m.totalMoneyReceived) * 100).toFixed(1) : '0.0';
+
+  if (kpisEl) {
+    kpisEl.innerHTML = `
+      <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <span class="text-[11px] font-semibold uppercase text-slate-400">Net Received Revenue</span>
+        <div class="text-xl font-black text-[#026047] dark:text-emerald-400 mt-1">${formatINR(m.totalMoneyReceived)}</div>
+        <div class="text-[10px] text-slate-500 mt-1">Verified inflows • Pending: ${formatINR(m.pendingClientPayments)}</div>
+      </div>
+      <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <span class="text-[11px] font-semibold uppercase text-slate-400">Total Company Outflows</span>
+        <div class="text-xl font-black text-rose-600 dark:text-rose-400 mt-1">${formatINR(totalDisbursements)}</div>
+        <div class="text-[10px] text-slate-500 mt-1">Ops ${formatINR(m.totalBusinessExpenses, false)} • Pay ${formatINR(m.teamSalariesPaid + m.founderDrawingsTotal, false)}</div>
+      </div>
+      <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <span class="text-[11px] font-semibold uppercase text-slate-400">Net Operating Profit</span>
+        <div class="text-xl font-black ${m.netBusinessProfit >= 0 ? 'text-[#026047] dark:text-emerald-400' : 'text-rose-600'} mt-1">${formatINR(m.netBusinessProfit)}</div>
+        <div class="text-[10px] text-slate-500 mt-1">Operating Margin: <strong>${marginPct}%</strong></div>
+      </div>
+      <div class="p-4 rounded-xl bg-[#fffde8] dark:bg-[#026047]/20 border border-[#026047]/30 shadow-sm">
+        <span class="text-[11px] font-bold uppercase text-[#026047] dark:text-emerald-300">Unencumbered Liquid Cash</span>
+        <div class="text-xl font-black text-[#026047] dark:text-emerald-300 mt-1">${formatINR(m.availableCompanyCash)}</div>
+        <div class="text-[10px] text-[#026047]/80 dark:text-emerald-200/80 mt-1">Earmarked Reserves: <strong>${formatINR(m.totalCompanyReserves)}</strong></div>
+      </div>
+    `;
+  }
+
+  if (pnlEl) {
+    const projects = STATE.projects || [];
+    if (projects.length === 0) {
+      pnlEl.innerHTML = `<div class="py-6 text-center text-xs text-slate-400">No projects registered.</div>`;
+    } else {
+      pnlEl.innerHTML = `
+        <table class="w-full text-left text-xs">
+          <thead>
+            <tr class="border-b border-slate-200 dark:border-slate-700 text-slate-500 font-semibold text-[11px]">
+              <th class="py-2 px-3">Project / Product</th>
+              <th class="py-2 px-3 text-right">Verified Revenue</th>
+              <th class="py-2 px-3 text-right">Direct Expenses</th>
+              <th class="py-2 px-3 text-right">Gross Profit</th>
+              <th class="py-2 px-3 text-right">Margin</th>
+              <th class="py-2 px-3 text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+            ${projects
+              .map((p) => {
+                const fin = getProjectFinancials(p.id);
+                const profit = fin.received - fin.expenses;
+                const pMargin = fin.received > 0 ? ((profit / fin.received) * 100).toFixed(1) + '%' : '—';
+                const pId = safeId(p.id);
+                return `
+                  <tr class="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
+                    <td class="py-2.5 px-3">
+                      <div class="font-bold text-slate-900 dark:text-white">${escapeHtml(p.name)}</div>
+                      <span class="text-[10px] font-mono text-slate-400">${escapeHtml(p.code)}</span>
+                    </td>
+                    <td class="py-2.5 px-3 text-right font-bold text-[#026047] dark:text-emerald-400">${formatINR(fin.received)}</td>
+                    <td class="py-2.5 px-3 text-right font-semibold text-rose-600 dark:text-rose-400">${formatINR(fin.expenses)}</td>
+                    <td class="py-2.5 px-3 text-right font-black ${profit >= 0 ? 'text-slate-900 dark:text-white' : 'text-rose-600'}">${formatINR(profit)}</td>
+                    <td class="py-2.5 px-3 text-right font-mono text-[11px]">${pMargin}</td>
+                    <td class="py-2.5 px-3 text-right">
+                      <button onclick="switchTab('projects'); viewProjectFinance('${pId}');" class="px-2.5 py-1 rounded bg-[#ffffea] text-[#026047] border border-[#026047]/30 text-[10px] font-bold hover:bg-[#fff9c2]">
+                        View P&amp;L
+                      </button>
+                    </td>
+                  </tr>`;
+              })
+              .join('')}
+          </tbody>
+        </table>
+      `;
+    }
+  }
+
+  if (monthlyEl) {
+    const monthlyMap = {};
+    const ensureMonth = (dStr) => {
+      const key = String(dStr || '').slice(0, 7) || '2026-11';
+      if (!monthlyMap[key]) monthlyMap[key] = { inflow: 0, expenses: 0, payroll: 0 };
+      return monthlyMap[key];
+    };
+
+    (STATE.income || [])
+      .filter((i) => i.status === 'received' && matchesDateFilter(i.paymentDate))
+      .forEach((i) => {
+        ensureMonth(i.paymentDate).inflow += Number(i.amount) || 0;
+      });
+    (STATE.expenses || [])
+      .filter((e) => e.status === 'approved' && matchesDateFilter(e.date))
+      .forEach((e) => {
+        ensureMonth(e.date).expenses += Number(e.amount) || 0;
+      });
+    (STATE.payouts || [])
+      .filter((p) => p.status === 'paid' && matchesDateFilter(p.paidDate))
+      .forEach((p) => {
+        ensureMonth(p.paidDate).payroll += Number(p.amount) || 0;
+      });
+    (STATE.drawings || [])
+      .filter((d) => !d.reversed && matchesDateFilter(d.date))
+      .forEach((d) => {
+        ensureMonth(d.date).payroll += Number(d.amount) || 0;
+      });
+
+    const months = Object.keys(monthlyMap).sort().reverse();
+    if (months.length === 0) {
+      monthlyEl.innerHTML = `<div class="py-6 text-center text-xs text-slate-400">No verified monthly financial activity in the selected period yet.</div>`;
+    } else {
+      monthlyEl.innerHTML = `
+        <table class="w-full text-left text-xs">
+          <thead>
+            <tr class="border-b border-slate-200 dark:border-slate-700 text-slate-500 font-semibold text-[11px]">
+              <th class="py-2 px-3">Accounting Period</th>
+              <th class="py-2 px-3 text-right">Verified Inflow</th>
+              <th class="py-2 px-3 text-right">Approved Expenses</th>
+              <th class="py-2 px-3 text-right">Payouts &amp; Drawings</th>
+              <th class="py-2 px-3 text-right">Net Monthly Cashflow</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+            ${months
+              .map((mo) => {
+                const row = monthlyMap[mo];
+                const net = row.inflow - row.expenses - row.payroll;
+                return `
+                  <tr class="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
+                    <td class="py-2.5 px-3 font-mono font-bold text-slate-900 dark:text-white">${escapeHtml(mo)}</td>
+                    <td class="py-2.5 px-3 text-right font-bold text-[#026047] dark:text-emerald-400">${formatINR(row.inflow)}</td>
+                    <td class="py-2.5 px-3 text-right text-rose-600 dark:text-rose-400">${formatINR(row.expenses)}</td>
+                    <td class="py-2.5 px-3 text-right text-amber-600 dark:text-amber-400">${formatINR(row.payroll)}</td>
+                    <td class="py-2.5 px-3 text-right font-black ${net >= 0 ? 'text-[#026047] dark:text-emerald-400' : 'text-rose-600'}">${formatINR(net)}</td>
+                  </tr>`;
+              })
+              .join('')}
+          </tbody>
+        </table>
+      `;
+    }
+  }
+
+  if (reservesEl) {
+    reservesEl.innerHTML = (STATE.reserves || [])
+      .map((r) => {
+        const bal = Number(r.currentBalance) || 0;
+        const tgt = Number(r.targetAmount) || 1;
+        const pct = Math.min(100, Math.round((bal / tgt) * 100));
+        return `
+          <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-2">
+            <div class="flex items-start justify-between gap-2">
+              <div class="font-bold text-xs text-slate-900 dark:text-white">${escapeHtml(r.name)}</div>
+              <span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-[#fffde8] text-[#026047] border border-[#026047]/30">${pct}%</span>
+            </div>
+            <div class="text-lg font-black text-[#026047] dark:text-emerald-400">${formatINR(bal)}</div>
+            <div class="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+              <div class="h-full bg-[#026047] transition-all" style="width: ${pct}%"></div>
+            </div>
+            <div class="flex justify-between text-[10px] text-slate-500">
+              <span>Target: ${formatINR(tgt, false)}</span>
+            </div>
+            <p class="text-[10px] text-slate-500 leading-snug">${escapeHtml(r.description)}</p>
+          </div>`;
+      })
+      .join('');
+  }
+
+  if (auditEl) {
+    const logs = (STATE.auditLogs || []).slice(0, 30);
+    if (logs.length === 0) {
+      auditEl.innerHTML = `<div class="py-6 text-center text-xs text-slate-400">No corporate audit events recorded yet.</div>`;
+    } else {
+      auditEl.innerHTML = `
+        <table class="w-full text-left text-xs">
+          <thead>
+            <tr class="border-b border-slate-200 dark:border-slate-700 text-slate-500 font-semibold text-[11px]">
+              <th class="py-2 px-3">Timestamp</th>
+              <th class="py-2 px-3">Action</th>
+              <th class="py-2 px-3">Details</th>
+              <th class="py-2 px-3">Authorized / Triggered By</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+            ${logs
+              .map(
+                (log) => `
+                <tr class="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
+                  <td class="py-2 px-3 font-mono text-[11px] text-slate-500 whitespace-nowrap">${escapeHtml(log.date)}</td>
+                  <td class="py-2 px-3 whitespace-nowrap">
+                    <span class="px-2 py-0.5 rounded font-mono text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-[#026047] dark:text-emerald-300">${escapeHtml(log.action)}</span>
+                  </td>
+                  <td class="py-2 px-3 text-slate-700 dark:text-slate-300">${escapeHtml(log.details)}</td>
+                  <td class="py-2 px-3 font-semibold text-slate-900 dark:text-white whitespace-nowrap">${escapeHtml(log.performedBy)}</td>
+                </tr>`
+              )
+              .join('')}
+          </tbody>
+        </table>
+      `;
+    }
+  }
+}
+window.renderFinancialSummary = renderFinancialSummary;
+
+window.openAllocateReserveModal = function () {
+  if (!requireFounder('allocate funds to company reserves')) return;
+  const modal = document.getElementById('modal-allocate-reserve');
+  if (modal) modal.classList.remove('hidden');
+};
+
+window.closeAllocateReserveModal = function () {
+  const modal = document.getElementById('modal-allocate-reserve');
+  if (modal) modal.classList.add('hidden');
+};
+
+window.submitAllocateReserve = function () {
+  if (!requireFounder('allocate funds to company reserves')) return;
+  const selectEl = document.getElementById('reserve-select');
+  const amountEl = document.getElementById('reserve-amount');
+  const reserveId = selectEl ? selectEl.value : '';
+  const amount = parseFloat(amountEl ? amountEl.value : '0');
+
+  if (!reserveId || !Number.isFinite(amount) || amount <= 0) {
+    return alert('Please select a reserve fund and enter a positive amount.');
+  }
+
+  const m = calculateMetrics();
+  if (amount > m.availableCompanyCash) {
+    return alert(
+      `Insufficient Unencumbered Cash (${formatINR(m.availableCompanyCash)}) to earmark ${formatINR(amount)} to reserves.`
+    );
+  }
+
+  const reserve = (STATE.reserves || []).find((r) => r.id === reserveId);
+  if (!reserve) return;
+
+  reserve.currentBalance = (Number(reserve.currentBalance) || 0) + amount;
+  recordAuditLog(
+    'RESERVE_ALLOCATED',
+    `Earmarked ${formatINR(amount)} into ${reserve.name}`,
+    'Pranav Bansode (Founder / Director)'
+  );
+  saveAppStateToStorage();
+
+  if (amountEl) amountEl.value = '';
+  closeAllocateReserveModal();
+  renderFinancialSummary();
+  renderFounderDashboard();
+  showToast(`Earmarked ${formatINR(amount)} to ${reserve.name}.`);
 };
 
 // Legacy view bridges
@@ -5182,21 +5926,41 @@ window.renderReserves = renderFinancialSummary;
 window.renderReports = renderFinancialSummary;
 
 window.exportFinancialReport = function (format) {
+  if (!requireFounder('export financial statements')) return;
   if (format === 'csv') {
-    let csv = 'Report,Metric,Value (INR)\n';
     const m = calculateMetrics();
-    csv += `Summary,Total Money Received,${m.totalMoneyReceived}\n`;
-    csv += `Summary,Total Business Expenses,${m.totalBusinessExpenses}\n`;
-    csv += `Summary,Net Business Profit,${m.netBusinessProfit}\n`;
-    csv += `Summary,Available Company Cash,${m.availableCompanyCash}\n`;
-    csv += `Summary,Pending Client Payments,${m.pendingClientPayments}\n`;
+    const rows = [
+      ['Section', 'Item', 'Category / Status', 'Date', 'Value (INR)'],
+      ['Summary', 'Total Money Received', 'Verified Inflow', STATE.dateFilter || 'nov_2026', m.totalMoneyReceived],
+      ['Summary', 'Total Business Expenses', 'Approved Outflow', STATE.dateFilter || 'nov_2026', m.totalBusinessExpenses],
+      ['Summary', 'Team Compensation Paid', 'Disbursed Payouts', STATE.dateFilter || 'nov_2026', m.teamSalariesPaid],
+      ['Summary', 'Founder Drawings', 'Equity Draw', STATE.dateFilter || 'nov_2026', m.founderDrawingsTotal],
+      ['Summary', 'Net Business Profit', 'Operating Profit', STATE.dateFilter || 'nov_2026', m.netBusinessProfit],
+      ['Summary', 'Total Earmarked Reserves', 'Corporate Reserves', STATE.dateFilter || 'nov_2026', m.totalCompanyReserves],
+      ['Summary', 'Available Company Cash', 'Unencumbered Liquid Cash', STATE.dateFilter || 'nov_2026', m.availableCompanyCash],
+      ['Summary', 'Pending Client Payments', 'Receivables', STATE.dateFilter || 'nov_2026', m.pendingClientPayments],
+    ];
 
-    const blob = new Blob([csv], { type: 'text/csv' });
+    (STATE.projects || []).forEach((p) => {
+      const fin = getProjectFinancials(p.id);
+      rows.push(['Project P&L', `${p.name} (${p.code})`, 'Net Margin', STATE.dateFilter || 'nov_2026', fin.received - fin.expenses]);
+    });
+
+    (STATE.income || []).forEach((inc) => {
+      rows.push(['Client Deal', `${inc.clientName} - ${inc.projectName}`, inc.status, inc.paymentDate, inc.amount]);
+    });
+
+    const csv = rows.map((r) => r.map((cell) => csvSafe(cell)).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = `Phoenix_Tech_Solution_Finance_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+    recordAuditLog('EXPORT_CSV', 'Exported corporate financial ledger CSV', 'Pranav Bansode (Founder / Director)');
     showToast('Financial CSV report downloaded.');
   } else if (format === 'print') {
     window.print();
@@ -5207,7 +5971,7 @@ function showToast(msg) {
   const toast = document.createElement('div');
   toast.className =
     'fixed bottom-6 right-6 z-50 bg-[#026047] text-[#fffde8] text-xs font-semibold px-4 py-3 rounded-xl shadow-xl flex items-center gap-2 transform transition-all duration-300 translate-y-2 opacity-0 border border-[#fffde8]/20';
-  toast.innerHTML = `<span>✓</span> <span>${msg}</span>`;
+  toast.innerHTML = `<span>✓</span> <span>${escapeHtml(msg)}</span>`;
   document.body.appendChild(toast);
 
   setTimeout(() => toast.classList.remove('translate-y-2', 'opacity-0'), 10);
@@ -5216,4 +5980,6 @@ function showToast(msg) {
     setTimeout(() => toast.remove(), 300);
   }, 3000);
 }
+window.showToast = showToast;
+})(window, document);
 
