@@ -919,7 +919,7 @@ function renderSidebarNav(activeTab) {
         <span class="text-sm">🎯</span>
         <div class="flex-1 min-w-0">
           <div class="truncate font-black">1. My Workspace & Leads</div>
-          <div class="text-[9px] opacity-75 truncate font-normal">Compensation & Lead Queue</div>
+          <div class="text-[9px] opacity-75 truncate font-normal">Research Desk & Lead Queue</div>
         </div>
       </button>
 
@@ -952,14 +952,6 @@ function renderSidebarNav(activeTab) {
         <div class="flex-1 min-w-0">
           <div class="truncate font-bold">4. Scout Expenses</div>
           <div class="text-[9px] opacity-75 truncate font-normal">Outreach & Prospecting Costs</div>
-        </div>
-      </button>
-
-      <button onclick="openNewLeadModal()" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-emerald-800/80 hover:bg-emerald-700 text-[#fffde8] font-bold transition-all text-left border border-[#fffde8]/20 mt-2 shadow-sm cursor-pointer">
-        <span class="text-sm">⚡</span>
-        <div class="flex-1 min-w-0">
-          <div class="truncate font-bold">+ Submit Client Lead</div>
-          <div class="text-[9px] opacity-75 truncate font-normal">Direct Route to Founder Pranav</div>
         </div>
       </button>
     `;
@@ -1081,8 +1073,10 @@ function updateRoleDisplay() {
   const btnCsv = document.getElementById('btn-topbar-csv');
   const btnIncome = document.getElementById('btn-topbar-income');
   const btnExpense = document.getElementById('btn-topbar-expense');
+  const btnSignOut = document.getElementById('btn-topbar-signout');
 
   if (STATE.activeRole === 'pranav') {
+    if (btnSignOut) btnSignOut.classList.remove('hidden');
     if (nameEl) nameEl.textContent = 'Pranav Bansode';
     if (avatarText) avatarText.textContent = 'PB';
     if (crownBadge) {
@@ -1123,6 +1117,7 @@ function updateRoleDisplay() {
     if (btnExpense) btnExpense.classList.remove('hidden');
 
   } else if (STATE.activeRole === 'arshad') {
+    if (btnSignOut) btnSignOut.classList.remove('hidden');
     if (nameEl) nameEl.textContent = 'Arshad Shaikh';
     if (avatarText) avatarText.textContent = 'AS';
     if (crownBadge) {
@@ -1161,6 +1156,7 @@ function updateRoleDisplay() {
     if (btnExpense) btnExpense.classList.remove('hidden');
 
   } else if (STATE.activeRole === 'aryan') {
+    if (btnSignOut) btnSignOut.classList.add('hidden');
     if (nameEl) nameEl.textContent = 'Aryan Bhore';
     if (avatarText) avatarText.textContent = 'AB';
     if (crownBadge) {
@@ -1199,6 +1195,7 @@ function updateRoleDisplay() {
     if (btnExpense) btnExpense.classList.remove('hidden');
 
   } else {
+    if (btnSignOut) btnSignOut.classList.remove('hidden');
     if (nameEl) nameEl.textContent = 'Vivek Gajdhane';
     if (avatarText) avatarText.textContent = 'VG';
     if (crownBadge) {
@@ -2263,13 +2260,46 @@ function renderEmployeeDashboard(memberId) {
               <p class="text-xs text-slate-500 dark:text-slate-400">Phoenix Tech Solutions Private Limited</p>
             </div>
           </div>
+          ${
+            !isAryan
+              ? `
           <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 text-xs sm:text-right">
             <span class="text-[10px] text-slate-400 block uppercase font-bold">Monthly Compensation</span>
             <div class="font-black text-lg text-slate-900 dark:text-white mt-0.5">${formatINR(mem.monthlyCompensation)}</div>
-          </div>
+          </div>`
+              : ''
+          }
         </div>
       </div>
 
+      ${
+        isAryan
+          ? `
+      <!-- Aryan Deal & Lead Pipeline Metrics -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
+          <span class="text-xs text-slate-400 font-medium">Scouted Client Leads</span>
+          <div class="text-xl font-bold text-slate-900 dark:text-white">${(STATE.leads || []).length} Leads</div>
+          <div class="text-[11px] text-slate-500 pt-1">Total deal prospects introduced</div>
+        </div>
+
+        <div class="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
+          <span class="text-xs text-slate-400 font-medium">Pipeline Deal Value</span>
+          <div class="text-xl font-bold text-[#026047] dark:text-emerald-400">
+            ${formatINR((STATE.leads || []).reduce((sum, l) => sum + (Number(l.dealValue) || 0), 0))}
+          </div>
+          <div class="text-[11px] text-slate-500 pt-1">Estimated contract portfolio</div>
+        </div>
+
+        <div class="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
+          <span class="text-xs text-slate-400 font-medium">Delivered &amp; Signed Deals</span>
+          <div class="text-xl font-black text-[#026047] dark:text-emerald-400">
+            ${(STATE.leads || []).filter((l) => l.status === 'approved_for_delivery').length} Closed
+          </div>
+          <div class="text-[11px] text-slate-500 pt-1">Founder final sign-off achieved</div>
+        </div>
+      </div>`
+          : `
       <!-- Compensation & Payouts Cards -->
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div class="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
@@ -2293,8 +2323,12 @@ function renderEmployeeDashboard(memberId) {
           <div class="text-xl font-black text-[#026047] dark:text-emerald-400">${formatINR(mem.paymentsMade)}</div>
           <div class="text-[11px] text-slate-500 pt-1">All past disbursements reconciled</div>
         </div>
-      </div>
+      </div>`
+      }
 
+      ${
+        !isAryan
+          ? `
       <!-- Payment History & Payout Ledger -->
       <div class="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
         <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
@@ -2318,9 +2352,12 @@ function renderEmployeeDashboard(memberId) {
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
-              ${memberPayouts.length === 0
-                ? '<tr><td colspan="7" class="py-6 text-center text-slate-400 italic">No disbursements recorded for your account yet.</td></tr>'
-                : memberPayouts.map((p) => `
+              ${
+                memberPayouts.length === 0
+                  ? '<tr><td colspan="7" class="py-6 text-center text-slate-400 italic">No disbursements recorded for your account yet.</td></tr>'
+                  : memberPayouts
+                      .map(
+                        (p) => `
                   <tr>
                     <td class="py-3 px-3 font-bold text-slate-900 dark:text-white">${escapeHtml(p.month)}</td>
                     <td class="py-3 px-3 font-mono text-slate-500">${formatDate(p.paidDate)}</td>
@@ -2332,11 +2369,16 @@ function renderEmployeeDashboard(memberId) {
                     </td>
                     <td class="py-3 px-3 text-right font-semibold text-slate-700 dark:text-slate-300">${escapeHtml(p.authorizedBy)}</td>
                   </tr>
-                `).join('')}
+                `
+                      )
+                      .join('')
+              }
             </tbody>
           </table>
         </div>
-      </div>
+      </div>`
+          : ''
+      }
 
       <!-- Assigned Projects & Key Deliverables + Incentives -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -3471,9 +3513,12 @@ function renderSingleLeadCard(rawLead, currentRole) {
           <span class="px-2 py-0.5 rounded text-[11px] font-semibold bg-[#fffde8] text-[#026047] border border-[#026047]/30">${escapeHtml(lead.productType)}</span>
         </div>
         <div class="flex items-center gap-2">
-          <span class="text-xs font-black text-[#026047] dark:text-emerald-400 bg-white dark:bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700">
-            Est: ${formatINR(lead.dealValue)}
-          </span>
+          <button onclick="openEditPricingModal('${lid}')" title="Click to edit deal pricing (e.g. 4,999/-)"
+            class="text-xs font-black text-[#026047] dark:text-emerald-400 bg-white dark:bg-slate-900 hover:bg-[#ffffea] hover:border-[#026047] dark:hover:bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 transition flex items-center gap-1.5 shadow-sm cursor-pointer group">
+            <span class="text-[11px]">🏷️</span>
+            <span>Est: ${formatINR(lead.dealValue)}</span>
+            <span class="text-[10px] text-slate-400 group-hover:text-[#026047] transition">✏️ Edit</span>
+          </button>
           <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${badgeColor}">
             ${escapeHtml(currentStageText)}
           </span>
@@ -3646,6 +3691,78 @@ window.closeNewLeadModal = function () {
   if (modal) modal.classList.add('hidden');
 };
 
+window.setLeadDealPrice = function (val) {
+  const el = document.getElementById('lead-deal-value');
+  if (el) el.value = val;
+};
+
+window.openEditPricingModal = function (leadId) {
+  const lead = (STATE.leads || []).find((l) => l.id === leadId);
+  if (!lead) return;
+  const modal = document.getElementById('modal-edit-lead-price');
+  const idEl = document.getElementById('edit-pricing-lead-id');
+  const nameEl = document.getElementById('edit-pricing-client-name');
+  const inputEl = document.getElementById('edit-pricing-input');
+  if (!modal || !idEl || !inputEl) {
+    const raw = prompt(
+      `Edit Pricing for "${lead.clientName}":\nEnter price (e.g. 4999 or 4999/-):`,
+      lead.dealValue || 4999
+    );
+    if (raw === null) return;
+    const cleaned = parseFloat(raw.replace(/[^0-9.]/g, ''));
+    if (isNaN(cleaned) || cleaned <= 0) {
+      alert('Invalid price entered.');
+      return;
+    }
+    lead.dealValue = cleaned;
+    saveLeadsToStorage();
+    saveAppStateToStorage();
+    showToast(`✓ Pricing updated to ${formatINR(cleaned)}!`);
+    renderCurrentTab();
+    return;
+  }
+  idEl.value = lead.id;
+  if (nameEl) nameEl.textContent = `${lead.clientName} (${lead.productType || 'Lead'})`;
+  inputEl.value = lead.dealValue || 4999;
+  modal.classList.remove('hidden');
+};
+
+window.closeEditPricingModal = function () {
+  const modal = document.getElementById('modal-edit-lead-price');
+  if (modal) modal.classList.add('hidden');
+};
+
+window.setEditPricePreset = function (amt) {
+  const inputEl = document.getElementById('edit-pricing-input');
+  if (inputEl) inputEl.value = amt;
+};
+
+window.saveEditedLeadPricing = function () {
+  const id = document.getElementById('edit-pricing-lead-id')?.value;
+  const rawVal = document.getElementById('edit-pricing-input')?.value;
+  const newPrice = parseFloat(rawVal);
+  if (!id || isNaN(newPrice) || newPrice <= 0) {
+    alert('Please enter a valid price amount (e.g. 4999).');
+    return;
+  }
+  const lead = (STATE.leads || []).find((l) => l.id === id);
+  if (!lead) return;
+  const oldPrice = lead.dealValue || 0;
+  lead.dealValue = newPrice;
+  saveLeadsToStorage();
+  recordAuditLog(
+    'LEAD_PRICING_UPDATED',
+    `Updated pricing for "${lead.clientName}" from ${formatINR(oldPrice)} to ${formatINR(newPrice)}`,
+    getCurrentUserName()
+  );
+  saveAppStateToStorage();
+  closeEditPricingModal();
+  showToast(`✓ Pricing updated to ${formatINR(newPrice)} for "${lead.clientName}"!`);
+  renderCurrentTab();
+};
+
+window.editLeadPricing = window.openEditPricingModal;
+
 window.submitClientLead = function () {
   if (!requireAuth('submit client leads')) return;
   const clientName = document.getElementById('lead-client-name')?.value.trim();
@@ -3655,8 +3772,8 @@ window.submitClientLead = function () {
   const dealValue = parseFloat(document.getElementById('lead-deal-value')?.value) || 0;
   const requirements = document.getElementById('lead-requirements')?.value.trim();
 
-  if (!clientName || !requirements || !phone || dealValue < 0) {
-    alert('Please fill out all required lead fields.');
+  if (!clientName || !requirements || !phone || dealValue <= 0) {
+    alert('Please fill out all required lead fields and enter a valid deal price (e.g. 4999).');
     return;
   }
 

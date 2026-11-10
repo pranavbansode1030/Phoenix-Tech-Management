@@ -514,7 +514,7 @@
               class="px-3 py-1.5 rounded-lg bg-[#026047] hover:bg-[#024d39] text-[#fffde8] text-xs font-bold shadow-sm">
               + Income
             </button>
-            <button onclick="logoutUser()" title="Sign Out & Return to Login Screen"
+            <button id="btn-topbar-signout" onclick="logoutUser()" title="Sign Out & Return to Login Screen"
               class="px-2.5 py-1.5 rounded-lg border border-red-200 dark:border-red-900/60 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/40 transition-all text-xs font-bold flex items-center gap-1 shadow-sm">
               <span>🔒</span>
               <span>Sign Out</span>
@@ -1452,9 +1452,18 @@
               </select>
             </div>
             <div>
-              <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Estimated Deal Value (₹) *</label>
-              <input type="number" id="lead-deal-value" required min="1000" step="500" placeholder="e.g. 75000"
+              <div class="flex items-center justify-between mb-1">
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300">Estimated Deal Value (₹) *</label>
+                <span class="text-[10px] text-slate-400">Can be any amount (e.g. 4999/-)</span>
+              </div>
+              <input type="number" id="lead-deal-value" required min="1" step="any" placeholder="e.g. 4999"
                 class="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-[#026047]" />
+              <div class="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                <span class="text-[10px] text-slate-400">Presets:</span>
+                <button type="button" onclick="setLeadDealPrice(4999)" class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 hover:bg-emerald-100 text-slate-700 dark:text-slate-300 hover:text-emerald-800 transition cursor-pointer">₹4,999/-</button>
+                <button type="button" onclick="setLeadDealPrice(9999)" class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 hover:bg-emerald-100 text-slate-700 dark:text-slate-300 hover:text-emerald-800 transition cursor-pointer">₹9,999/-</button>
+                <button type="button" onclick="setLeadDealPrice(24999)" class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 hover:bg-emerald-100 text-slate-700 dark:text-slate-300 hover:text-emerald-800 transition cursor-pointer">₹24,999/-</button>
+              </div>
             </div>
           </div>
 
@@ -1479,6 +1488,57 @@
             <button type="submit"
               class="px-4 py-2 rounded-lg bg-[#026047] text-[#fffde8] font-bold text-xs hover:bg-[#024d39] transition shadow-sm flex items-center gap-1.5">
               <span>🚀</span> Submit Lead to Founder
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL: EDIT LEAD PRICING                   -->
+    <!-- Allows editing deal price to any amount (e.g. 4999/-) -->
+    <!-- ========================================== -->
+    <div id="modal-edit-lead-price"
+      class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+      <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+          <div class="flex items-center gap-2">
+            <span class="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-950 text-[#026047] dark:text-emerald-300 text-sm">🏷️</span>
+            <div>
+              <h3 class="font-bold text-sm text-slate-900 dark:text-white">Edit Deal Pricing</h3>
+              <p id="edit-pricing-client-name" class="text-[11px] text-slate-500 font-semibold truncate"></p>
+            </div>
+          </div>
+          <button onclick="closeEditPricingModal()"
+            class="text-slate-400 hover:text-slate-700 dark:hover:text-white text-xl font-bold cursor-pointer">&times;</button>
+        </div>
+
+        <form onsubmit="event.preventDefault(); saveEditedLeadPricing();" class="space-y-3.5">
+          <input type="hidden" id="edit-pricing-lead-id" />
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="block text-xs font-bold text-slate-700 dark:text-slate-300">Custom Price (₹) *</label>
+              <span class="text-[10px] text-slate-400">Can be any amount (e.g. 4999/-)</span>
+            </div>
+            <input type="number" id="edit-pricing-input" required min="1" step="any" placeholder="e.g. 4999"
+              class="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-[#026047]" />
+            <div class="flex items-center gap-1.5 mt-2 flex-wrap">
+              <span class="text-[10px] text-slate-400">Presets:</span>
+              <button type="button" onclick="setEditPricePreset(4999)" class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 hover:bg-emerald-100 text-slate-700 dark:text-slate-300 hover:text-emerald-800 transition cursor-pointer">₹4,999/-</button>
+              <button type="button" onclick="setEditPricePreset(9999)" class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 hover:bg-emerald-100 text-slate-700 dark:text-slate-300 hover:text-emerald-800 transition cursor-pointer">₹9,999/-</button>
+              <button type="button" onclick="setEditPricePreset(14999)" class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 hover:bg-emerald-100 text-slate-700 dark:text-slate-300 hover:text-emerald-800 transition cursor-pointer">₹14,999/-</button>
+              <button type="button" onclick="setEditPricePreset(24999)" class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 hover:bg-emerald-100 text-slate-700 dark:text-slate-300 hover:text-emerald-800 transition cursor-pointer">₹24,999/-</button>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <button type="button" onclick="closeEditPricingModal()"
+              class="px-4 py-2 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold cursor-pointer">
+              Cancel
+            </button>
+            <button type="submit"
+              class="px-4 py-2 rounded-lg bg-[#026047] text-[#fffde8] font-bold text-xs hover:bg-[#024d39] transition shadow-sm cursor-pointer">
+              Save Pricing
             </button>
           </div>
         </form>
