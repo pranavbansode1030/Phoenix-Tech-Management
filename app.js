@@ -4719,23 +4719,14 @@ function renderProjects() {
   }
 
   container.innerHTML = `
-    <!-- Top Section Header & Sub-Tab Switcher (One In One) -->
+    <!-- Top Section Header -->
     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
       <div class="flex items-center gap-2">
-        <div class="inline-flex p-1 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-          <button onclick="setProjectSubView('list')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 bg-[#026047] text-[#fffde8] shadow-sm cursor-pointer">
-            <span>📁</span> Products List (${allProjects.length})
-          </button>
-          <button onclick="setProjectSubView('finance')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer">
-            <span>📊</span> Project Financials &amp; P&amp;L
-          </button>
-        </div>
+        <span class="px-2 py-0.5 rounded text-[10px] font-black bg-[#026047] text-[#fffde8] uppercase tracking-wider">Products</span>
+        <h2 class="text-base font-bold text-slate-900 dark:text-white">Designed Products &amp; Platforms</h2>
+        <span class="text-xs text-slate-400 font-semibold">(${allProjects.length} Active)</span>
       </div>
       <div class="flex items-center gap-2 self-start sm:self-auto flex-wrap">
-        <button onclick="viewProjectFinance('ALL')"
-          class="px-3.5 py-1.5 rounded-2xl bg-[#ffffea] text-[#026047] border border-[#026047]/30 font-bold text-xs hover:bg-[#fff9c2] transition flex items-center gap-1.5 shadow-sm cursor-pointer">
-          <span>📊</span> View Financials
-        </button>
         <button onclick="openNewProjectModal()"
           class="px-3.5 py-1.5 rounded-lg bg-[#026047] text-[#fffde8] font-bold text-xs hover:bg-[#024d39] transition cursor-pointer">
           + New Product
@@ -4780,34 +4771,27 @@ function renderProjects() {
           </button>
         </div>
       </div>
-
-      <div class="flex items-center gap-2 self-start sm:self-auto flex-wrap">
-        <button onclick="viewProjectFinance('ALL')"
-          class="px-3.5 py-1.5 rounded-2xl bg-[#ffffea] text-[#026047] border border-[#026047]/30 font-bold text-xs hover:bg-[#fff9c2] transition flex items-center gap-1.5 shadow-sm cursor-pointer">
-          <span>📊</span> View Financials
-        </button>
-      </div>
     </div>
 
     <!-- Designed Products Minimal List -->
     <div class="space-y-3">
       ${
         visibleProjects.length === 0
-          ? `<div class="p-12 text-center text-slate-400 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
+            ? `<div class="p-12 text-center text-slate-400 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
                <span class="text-3xl block mb-2">🔍</span>
                <p class="font-semibold text-slate-600 dark:text-slate-300">No designed products match your search or filter.</p>
                <button onclick="filterProjectList('ALL'); handleProjectSearch('');" class="mt-3 px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-300">Reset Filters</button>
              </div>`
-          : visibleProjects
-              .map((p, idx) => {
-                const pId = safeId(p.id);
-                const itemNum = String(idx + 1).padStart(2, '0');
-                const displayName = `${idx + 1}) ${escapeHtml(p.name)}`;
-                const fin = getProjectFinancials(p.id);
-                const netProfit = fin.received - fin.expenses;
-                const isProfit = netProfit >= 0;
+            : visibleProjects
+                .map((p, idx) => {
+                  const pId = safeId(p.id);
+                  const itemNum = String(idx + 1).padStart(2, '0');
+                  const displayName = `${idx + 1}) ${escapeHtml(p.name)}`;
+                  const fin = getProjectFinancials(p.id);
+                  const netProfit = fin.received - fin.expenses;
+                  const isProfit = netProfit >= 0;
 
-                return `
+                  return `
                 <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between gap-3 hover:border-[#026047] transition">
                   <div class="flex items-center gap-3">
                     <div class="w-9 h-9 rounded-xl bg-[#026047] text-white font-black text-xs flex items-center justify-center shadow-sm shrink-0">
@@ -4827,15 +4811,9 @@ function renderProjects() {
                       </div>
                     </div>
                   </div>
-                  <div class="flex items-center gap-2">
-                    <button onclick="viewProjectFinance('${pId}')"
-                      class="px-3.5 py-1.5 rounded-2xl bg-[#ffffea] text-[#026047] border border-[#026047]/30 font-bold text-xs hover:bg-[#fff9c2] transition flex items-center gap-1.5 shadow-sm cursor-pointer">
-                      <span>📊</span> View Financials
-                    </button>
-                  </div>
                 </div>`;
-              })
-              .join('')
+                })
+                .join('')
       }
     </div>
   `;
