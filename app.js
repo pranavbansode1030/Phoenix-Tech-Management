@@ -4635,6 +4635,10 @@ function renderProjects() {
         <span class="text-xs text-slate-400 font-semibold">(${allProjects.length} Active)</span>
       </div>
       <div class="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+        <button onclick="viewProjectFinance('ALL')"
+          class="px-3.5 py-1.5 rounded-2xl bg-[#ffffea] text-[#026047] border border-[#026047]/30 font-bold text-xs hover:bg-[#fff9c2] transition flex items-center gap-1.5 shadow-sm cursor-pointer">
+          <span>📊</span> View Financials
+        </button>
         <button onclick="openNewProjectModal()"
           class="px-3.5 py-1.5 rounded-lg bg-[#026047] text-[#fffde8] font-bold text-xs hover:bg-[#024d39] transition cursor-pointer">
           + New Product
