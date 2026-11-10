@@ -1,0 +1,1418 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Phoenix Tech Solutions Management</title>
+  <!-- Official Phoenix Tech Favicon / Browser Tab Logo -->
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png" />
+  <link rel="icon" type="image/png" href="favicon.png" />
+  <link rel="shortcut icon" href="favicon.ico" />
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            forest: {
+              DEFAULT: '#026047',
+              50: '#edf9f5',
+              600: '#026047',
+              700: '#024d39',
+              800: '#013b2c',
+              900: '#01281e',
+            },
+            ivory: {
+              DEFAULT: '#fffde8',
+              50: '#fffef7',
+              100: '#fffde8',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: #faf9f0;
+    }
+
+    .dark body {
+      background-color: #0b1411;
+      color: #e5ece9;
+    }
+
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #cfcbba;
+      border-radius: 9999px;
+    }
+
+    .dark ::-webkit-scrollbar-thumb {
+      background: #1f332c;
+    }
+
+    @media print {
+      body {
+        background-color: #ffffff !important;
+        color: #000000 !important;
+      }
+      aside, header, #topbar-actions-container, .no-print, button {
+        display: none !important;
+      }
+      .flex-1 {
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+      }
+      main {
+        padding: 0 !important;
+      }
+      #view-client-docs {
+        display: block !important;
+      }
+      #printable-client-doc {
+        box-shadow: none !important;
+        border: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+      }
+    }
+  </style>
+</head>
+
+<body class="min-h-screen flex selection:bg-[#026047] selection:text-[#fffde8] text-slate-900 dark:text-slate-100 bg-[#faf9f0] dark:bg-[#0b1411]">
+
+    <!-- ============================================================================== -->
+    <!-- SECURE EMPLOYEE & FOUNDER LOGIN PORTAL                                         -->
+    <!-- Minimal, zero-scroll single-viewport layout with official logo in square       -->
+    <!-- ============================================================================== -->
+    <div id="login-portal-screen"
+      class="h-screen w-full bg-gradient-to-br from-[#026047] via-[#014231] to-[#01281e] text-[#fffde8] flex flex-col justify-between p-3 sm:p-4 z-50 fixed inset-0 overflow-hidden">
+
+      <!-- Top Branding Bar -->
+      <div class="max-w-6xl w-full mx-auto flex items-center justify-between py-1 border-b border-[#024d39]/80 shrink-0">
+        <div class="flex items-center gap-2.5">
+          <img src="logo-icon-ivory.png" alt="Phoenix Tech Logo" class="h-8 w-8 object-contain shrink-0"
+            onerror="this.src='logo-transparent.png'" />
+          <div>
+            <h1 class="text-xs font-black tracking-wider uppercase text-[#fffde8] leading-tight">Phoenix Tech Solutions</h1>
+            <span class="text-[9px] tracking-wide text-[#fffde8] opacity-75 font-semibold">Private Limited Ã¢â‚¬Â¢ Corporate Portal</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <span
+            class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-950/70 border border-emerald-500/30 text-[9px] font-bold text-emerald-300">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Role-Based Security Active
+          </span>
+        </div>
+      </div>
+
+      <!-- Center Credentials Area: Minimal, Non-Scrolling Square Login Card -->
+      <div class="max-w-[360px] w-full mx-auto my-auto py-2">
+        
+        <!-- Square Executive Login Card -->
+        <div class="bg-white/10 dark:bg-black/40 backdrop-blur-2xl border border-white/20 dark:border-white/10 rounded-2xl p-5 shadow-2xl space-y-3">
+          
+          <!-- Card Header & Official Logo in Square -->
+          <div class="text-center space-y-1">
+            <div class="w-12 h-12 rounded-xl bg-[#fffde8] p-2 flex items-center justify-center shadow-md mx-auto mb-1 border border-[#fffde8]/40">
+              <img src="logo-icon-black.png" alt="Phoenix Tech Logo" class="w-full h-full object-contain" onerror="this.src='logo-icon-ivory.png'" />
+            </div>
+            <h2 class="text-lg font-black text-[#fffde8] tracking-tight">
+              Member Sign In
+            </h2>
+            <p class="text-[11px] text-[#fffde8]/70">
+              Phoenix Tech Solutions Private Limited
+            </p>
+          </div>
+
+          <!-- Common Login Form -->
+          <form onsubmit="event.preventDefault(); handleCommonLogin();" class="space-y-2.5 pt-0.5">
+            
+            <!-- Unique Member ID Field -->
+            <div class="space-y-1">
+              <label for="common-login-id" class="text-[10px] font-bold text-[#fffde8] flex items-center justify-between uppercase tracking-wider">
+                <span>Member ID / Username</span>
+                <span class="text-[9px] text-[#fffde8]/50 lowercase font-normal">PB-01, AS-02, VG-03</span>
+              </label>
+              <div class="relative">
+                <span class="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-[#fffde8]/60 text-xs">
+                  Ã°Å¸â€˜Â¤
+                </span>
+                <input
+                  type="text"
+                  id="common-login-id"
+                  placeholder="Enter Member ID (e.g. PB-01)"
+                  autocomplete="username"
+                  class="w-full pl-8 pr-3 py-2 rounded-xl bg-black/25 border border-white/20 text-[#fffde8] placeholder:text-white/40 text-xs font-semibold focus:outline-none focus:border-[#fffde8] focus:ring-1 focus:ring-[#fffde8]/30 transition"
+                />
+              </div>
+            </div>
+
+            <!-- Password / Security PIN Field -->
+            <div class="space-y-1">
+              <label for="common-login-password" class="text-[10px] font-bold text-[#fffde8] flex items-center justify-between uppercase tracking-wider">
+                <span>Password / PIN</span>
+                <span class="text-[9px] text-[#fffde8]/50 lowercase font-normal">secret key</span>
+              </label>
+              <div class="relative">
+                <span class="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-[#fffde8]/60 text-xs">
+                  Ã°Å¸â€â€˜
+                </span>
+                <input
+                  type="password"
+                  id="common-login-password"
+                  placeholder="Enter password or PIN"
+                  autocomplete="current-password"
+                  class="w-full pl-8 pr-8 py-2 rounded-xl bg-black/25 border border-white/20 text-[#fffde8] placeholder:text-white/40 text-xs font-mono tracking-wider focus:outline-none focus:border-[#fffde8] focus:ring-1 focus:ring-[#fffde8]/30 transition"
+                />
+                <button
+                  type="button"
+                  onclick="togglePasswordVisibility('common-login-password')"
+                  class="absolute inset-y-0 right-0 pr-2.5 flex items-center text-[#fffde8]/60 hover:text-[#fffde8] text-xs transition"
+                  title="Toggle Password Visibility"
+                >
+                  <span id="common-login-password-eye">Ã°Å¸â€˜ÂÃ¯Â¸Â</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Error Notice Box (Hidden by default) -->
+            <div id="common-login-error" class="hidden p-2 rounded-lg bg-rose-500/20 border border-rose-400/40 text-rose-200 text-[11px] flex items-center gap-1.5">
+              <span>Ã¢Å¡Â Ã¯Â¸Â</span>
+              <span id="common-login-error-text">Invalid Member ID or Password.</span>
+            </div>
+
+            <!-- Submit Button -->
+            <button
+              type="submit"
+              class="w-full py-2 rounded-xl bg-[#fffde8] hover:bg-white text-[#026047] font-black text-xs uppercase tracking-wider shadow hover:shadow-md transition flex items-center justify-center gap-1.5 cursor-pointer mt-0.5"
+            >
+              <span>Sign In</span>
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+            </button>
+          </form>
+
+          <!-- Authorized Staff Credentials Helper / Quick Fill -->
+          <div class="pt-2.5 border-t border-white/10 space-y-1">
+            <div class="flex items-center justify-between text-[9px] text-[#fffde8]/70">
+              <span class="font-bold uppercase tracking-wider">Quick Fill (1-Click Test):</span>
+            </div>
+
+            <div class="grid grid-cols-3 gap-1.5 text-center">
+              <!-- Pranav Helper -->
+              <button
+                type="button"
+                onclick="quickFillLogin('PB-01', '1001')"
+                class="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 border border-white/10 hover:border-amber-400/50 transition group text-center"
+              >
+                <div class="text-xs">Ã°Å¸â€˜â€˜</div>
+                <div class="text-[10px] font-bold text-[#fffde8] group-hover:text-amber-300 leading-tight">Pranav</div>
+                <div class="text-[8px] text-[#fffde8]/60 font-mono">PB-01</div>
+              </button>
+
+              <!-- Arshad Helper -->
+              <button
+                type="button"
+                onclick="quickFillLogin('AS-02', '2002')"
+                class="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 border border-white/10 hover:border-blue-400/50 transition group text-center"
+              >
+                <div class="text-xs">Ã°Å¸Â¤Â</div>
+                <div class="text-[10px] font-bold text-[#fffde8] group-hover:text-blue-300 leading-tight">Arshad</div>
+                <div class="text-[8px] text-[#fffde8]/60 font-mono">AS-02</div>
+              </button>
+
+              <!-- Vivek Helper -->
+              <button
+                type="button"
+                onclick="quickFillLogin('VG-03', '3003')"
+                class="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 border border-white/10 hover:border-purple-400/50 transition group text-center"
+              >
+                <div class="text-xs">Ã°Å¸â€™Â»</div>
+                <div class="text-[10px] font-bold text-[#fffde8] group-hover:text-purple-300 leading-tight">Vivek</div>
+                <div class="text-[8px] text-[#fffde8]/60 font-mono">VG-03</div>
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Security Notice -->
+        <div class="mt-2 text-center text-[10px] text-[#fffde8]/60 flex items-center justify-center gap-1">
+          <span>Ã°Å¸â€â€™</span> Role-Based Security Active Ã¢â‚¬Â¢ Confidential Access
+        </div>
+      </div>
+
+      <!-- Portal Footer -->
+      <div
+        class="max-w-6xl w-full mx-auto py-1.5 border-t border-[#024d39]/80 flex flex-col sm:flex-row items-center justify-between text-[10px] text-[#fffde8]/60 gap-1 shrink-0">
+        <div>
+          <strong class="text-[#fffde8]">Phoenix Tech Solutions Private Limited</strong> &copy; 2026.
+        </div>
+        <div>
+          Confidential Corporate Ledger & Enterprise ERP Infrastructure
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================================================== -->
+    <!-- MAIN APPLICATION WORKSPACE (Revealed upon authenticated login)                  -->
+    <!-- ============================================================================== -->
+    <div id="app-workspace" class="flex min-h-screen w-full">
+
+      <!-- ============================================================================== -->
+      <!-- SIDEBAR: #026047 (DEEP EMERALD) WITH OFFICIAL PHOENIX LOGO                     -->
+      <!-- ============================================================================== -->
+      <aside
+        class="w-64 bg-[#026047] text-[#fffde8] flex flex-col shrink-0 min-h-screen sticky top-0 h-screen border-r border-[#014d39] overflow-y-auto">
+
+        <!-- Seamless Transparent Ivory (#fffde8) Logo Lockup -->
+        <div class="px-5 py-4 border-b border-[#024d39] flex items-center gap-3">
+          <img src="logo-icon-ivory.png" alt="Phoenix Tech Logo" class="h-10 w-10 object-contain shrink-0"
+            onerror="this.src='logo-transparent.png'" />
+          <div class="flex flex-col justify-center">
+            <h1 class="text-sm font-black tracking-wider text-[#fffde8] uppercase leading-tight">Phoenix Tech</h1>
+            <span class="text-[10px] tracking-wide text-[#fffde8] opacity-75 font-semibold">Finance System</span>
+          </div>
+        </div>
+
+        <!-- Role-Based Dynamic Navigation Tabs (Customized per Authenticated Member) -->
+        <nav id="sidebar-nav" class="p-3 space-y-1.5 flex-1 text-xs">
+          <!-- Section: Executive Governance -->
+          <div class="px-3 pt-1 pb-1 text-[10px] font-bold uppercase tracking-wider text-[#fffde8]/60 flex items-center gap-1.5">
+            <span>Ã°Å¸Ââ€ºÃ¯Â¸Â</span> Executive Governance
+          </div>
+
+          <!-- 1. Dashboard Overview -->
+          <button data-nav="dashboard-overview"
+            class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-[#fffde8] text-[#026047] font-bold transition-all text-left shadow-sm">
+            <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+            </svg>
+            <div class="flex-1 min-w-0">
+              <div class="truncate font-black">1. Dashboard Overview</div>
+              <div class="text-[9px] opacity-75 truncate font-normal">Finances, Inflows & Solvency</div>
+            </div>
+          </button>
+
+          <!-- 2. Approval -->
+          <button data-nav="approvals"
+            class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39] transition-all text-left">
+            <span class="text-sm">Ã°Å¸â€˜â€˜</span>
+            <div class="flex-1 min-w-0">
+              <div class="truncate font-black flex items-center justify-between">
+                <span>2. Approval</span>
+                <span id="nav-approval-badge" class="px-1.5 py-0.5 rounded-full text-[9px] font-black bg-amber-400 text-slate-900">0</span>
+              </div>
+              <div class="text-[9px] opacity-75 truncate font-normal">One-row Founder approvals</div>
+            </div>
+          </button>
+
+          <!-- Section: Products & Operations -->
+          <div class="px-3 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-[#fffde8]/60 flex items-center gap-1.5 border-t border-[#024d39]/80 mt-1">
+            <span>Ã°Å¸Å¡â‚¬</span> Products & Operations
+          </div>
+
+          <!-- 3. Projects -->
+          <button data-nav="projects"
+            class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39] transition-all text-left">
+            <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+            </svg>
+            <div class="flex-1 min-w-0">
+              <div class="truncate font-bold">3. Projects</div>
+              <div class="text-[9px] opacity-75 truncate font-normal">LeadX & Smart Review Scopes</div>
+            </div>
+          </button>
+
+          <!-- 4. Assign Projects -->
+          <button data-nav="assign-projects"
+            class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39] transition-all text-left">
+            <span class="text-sm">Ã°Å¸â€œÅ’</span>
+            <div class="flex-1 min-w-0">
+              <div class="truncate font-bold">4. Assign Projects</div>
+              <div class="text-[9px] opacity-75 truncate font-normal">Share work with employees</div>
+            </div>
+          </button>
+
+          <!-- 5. Sales Done -->
+          <button data-nav="sales-done"
+            class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39] transition-all text-left">
+            <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+            </svg>
+            <div class="flex-1 min-w-0">
+              <div class="truncate font-bold">5. Sales Done</div>
+              <div class="text-[9px] opacity-75 truncate font-normal">Product Sales & Deals Done</div>
+            </div>
+          </button>
+
+          <!-- Section: Financial Controls -->
+          <div class="px-3 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-[#fffde8]/60 flex items-center gap-1.5 border-t border-[#024d39]/80 mt-1">
+            <span>Ã°Å¸â€™Â¼</span> Financial Controls
+          </div>
+
+          <!-- 6. Project Finance -->
+          <button data-nav="project-finance"
+            class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39] transition-all text-left">
+            <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+            </svg>
+            <div class="flex-1 min-w-0">
+              <div class="truncate font-bold">6. Project Finance</div>
+              <div class="text-[9px] opacity-75 truncate font-normal">Inflows, Costs & Margins</div>
+            </div>
+          </button>
+
+          <!-- 7. Expense Management -->
+          <button data-nav="expense-management"
+            class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39] transition-all text-left">
+            <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div class="flex-1 min-w-0">
+              <div class="truncate font-bold">7. Expense Management</div>
+              <div class="text-[9px] opacity-75 truncate font-normal">Director Approvals & Outflows</div>
+            </div>
+          </button>
+
+          <!-- 8. Financial Summary -->
+          <button data-nav="financial-summary"
+            class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39] transition-all text-left">
+            <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <div class="flex-1 min-w-0">
+              <div class="truncate font-bold">8. Financial Summary</div>
+              <div class="text-[9px] opacity-75 truncate font-normal">Monthly Performance & P&L</div>
+            </div>
+          </button>
+        </nav>
+
+        <!-- Footer -->
+        <div class="p-4 border-t border-[#024d39] text-[11px]">
+          <span class="block font-bold text-[#fffde8] text-xs">Phoenix Tech Solutions</span>
+          <span class="block text-[10px] text-[#fffde8] opacity-80 uppercase tracking-wider font-semibold">Private
+            Limited</span>
+          <button onclick="logoutUser()"
+            class="mt-2.5 text-[10px] text-[#fffde8]/80 hover:text-white flex items-center gap-1.5 transition underline-offset-2 hover:underline">
+            <span>Ã°Å¸â€â€™</span> Sign Out
+          </button>
+        </div>
+
+      </aside>
+
+      <!-- ============================================================================== -->
+      <!-- MAIN WORKSPACE CONTENT                                                         -->
+      <!-- ============================================================================== -->
+      <div class="flex-1 flex flex-col min-h-screen overflow-x-hidden">
+
+        <!-- Topbar -->
+        <header
+          class="h-16 border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur sticky top-0 z-20 px-6 flex items-center justify-between">
+
+          <!-- Date Filter -->
+          <div class="flex items-center gap-3">
+            <span class="text-xs font-semibold text-slate-500 dark:text-slate-400 hidden sm:inline">Period:</span>
+            <select id="date-filter"
+              class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs rounded-lg px-3 py-1.5 text-slate-800 dark:text-slate-200 font-medium focus:outline-none focus:border-[#026047] cursor-pointer">
+              <option value="current_month">Current Month (November 2026)</option>
+              <option value="previous_month">Previous Month (October 2026)</option>
+              <option value="last_3_months">Last 3 Months</option>
+              <option value="current_fy">Current FY 2026-27</option>
+            </select>
+          </div>
+
+          <!-- Executive Distinction Indicator -->
+          <div id="topbar-founder-pill"
+            class="hidden md:flex items-center gap-2 px-3 py-1 rounded-full bg-[#026047]/10 dark:bg-emerald-950/60 border border-[#026047]/20 text-xs shadow-sm">
+            <span class="w-2 h-2 rounded-full bg-[#026047] dark:bg-emerald-400 animate-pulse"></span>
+            <span class="font-extrabold text-[#026047] dark:text-emerald-300">Pranav Bansode</span>
+            <span
+              class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-[#026047] text-[#fffde8]">Ã°Å¸â€˜â€˜
+              Founder / Director</span>
+          </div>
+
+          <!-- Quick Actions (Role-Adaptive) -->
+          <div id="topbar-actions-container" class="flex items-center gap-2">
+            <!-- Theme Toggle -->
+            <button onclick="toggleTheme()" title="Toggle Theme"
+              class="p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all text-xs">
+              Ã°Å¸Å’â€œ
+            </button>
+            <button id="btn-topbar-csv" onclick="exportFinancialReport('csv')"
+              class="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-medium">
+              CSV
+            </button>
+            <button id="btn-topbar-expense" onclick="openNewExpenseModal()"
+              class="px-3 py-1.5 rounded-lg bg-rose-700 hover:bg-rose-800 text-white text-xs font-bold shadow-sm">
+              + Expense
+            </button>
+            <button id="btn-topbar-income" onclick="openNewIncomeModal()"
+              class="px-3 py-1.5 rounded-lg bg-[#026047] hover:bg-[#024d39] text-[#fffde8] text-xs font-bold shadow-sm">
+              + Income
+            </button>
+          </div>
+
+        </header>
+
+        <!-- Main Views Area -->
+        <main class="p-6 flex-1 max-w-7xl w-full mx-auto space-y-6">
+
+          <!-- ========================================== -->
+          <!-- VIEW 1: DASHBOARD OVERVIEW                 -->
+          <!-- Overall company finances, income, expenses, cash, approvals -->
+          <!-- ========================================== -->
+          <section id="view-dashboard-overview" class="tab-view space-y-6">
+
+            <!-- 4 Core Financial KPI Cards (Interconnected) -->
+            <div id="kpi-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <!-- Rendered by app.js -->
+            </div>
+
+            <!-- Director Approvals Queue (Income + Expense) -->
+            <div
+              class="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+              <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+                <div class="flex items-center gap-2">
+                  <span class="text-sm">Ã¢Å¡Â¡</span>
+                  <h3 class="text-sm font-bold text-slate-900 dark:text-white">Founder Approvals Queue</h3>
+                  <span class="text-[10px] text-slate-400">Sole Director Signatory Clearance</span>
+                </div>
+                <span id="approvals-count-badge"
+                  class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">Active
+                  Queue</span>
+              </div>
+              <div id="founder-approvals-queue">
+                <!-- Rendered by app.js -->
+              </div>
+            </div>
+
+            <!-- Verified Company Inflow Ledger (With Instant Invoice Download) -->
+            <div
+              class="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+              <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+                <div>
+                  <h3 class="text-sm font-bold text-slate-900 dark:text-white">Company Income & Verified Client Inflows
+                  </h3>
+                  <p class="text-xs text-slate-500 dark:text-slate-400">All received client revenue with 1-click
+                    official invoice download.</p>
+                </div>
+                <button onclick="openNewIncomeModal()"
+                  class="px-3 py-1 rounded-lg bg-[#026047] text-[#fffde8] font-bold text-xs hover:bg-[#024d39]">
+                  + Enroll Income
+                </button>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs">
+                  <thead>
+                    <tr
+                      class="border-b border-slate-200 dark:border-slate-700 text-slate-500 font-semibold text-[11px]">
+                      <th class="py-2.5 px-3">Date</th>
+                      <th class="py-2.5 px-3">Client & Enrolled By</th>
+                      <th class="py-2.5 px-3">Project</th>
+                      <th class="py-2.5 px-3 text-right">Amount (Ã¢â€šÂ¹)</th>
+                      <th class="py-2.5 px-3 text-center">Payment Method</th>
+                      <th class="py-2.5 px-3 text-center">Status</th>
+                      <th class="py-2.5 px-3 text-right">Director Action / Invoice</th>
+                    </tr>
+                  </thead>
+                  <tbody id="income-table-body">
+                    <!-- Rendered by app.js -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </section>
+
+          
+
+          <!-- ========================================== -->
+          <!-- VIEW: APPROVALS (FOUNDER APPROVAL CENTER)  -->
+          <!-- All pending requests listed in a row view  -->
+          <!-- ========================================== -->
+          <section id="view-approvals" class="tab-view hidden space-y-6">
+
+            <div
+              class="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm gap-3">
+              <div>
+                <div class="flex items-center gap-2">
+                  <span
+                    class="px-2 py-0.5 rounded text-[10px] font-black bg-[#026047] text-[#fffde8] uppercase tracking-wider">Founder Approvals</span>
+                  <h2 class="text-base font-bold text-slate-900 dark:text-white">Central Approvals Queue</h2>
+                </div>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  All income inflows, expense reimbursements, compensation disbursements and task deliverables awaiting Founder & Director authorization.
+                </p>
+              </div>
+            </div>
+
+            <!-- Approvals Summary Metric Cards -->
+            <div id="approvals-metrics-container" class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+              <!-- Rendered dynamically by app.js -->
+            </div>
+
+            <!-- Approvals Filter Toolbar -->
+            <div
+              class="flex flex-wrap items-center justify-between gap-2 p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-800 text-xs">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="text-slate-500 font-semibold text-[11px]">Filter Category:</span>
+                <button onclick="filterApprovals('ALL')" id="filter-appr-ALL"
+                  class="px-2.5 py-1 rounded-lg bg-[#026047] text-[#fffde8] font-bold text-xs transition">
+                  All Pending
+                </button>
+                <button onclick="filterApprovals('INCOME')" id="filter-appr-INCOME"
+                  class="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-medium text-xs hover:bg-slate-50">
+                  Client Inflows
+                </button>
+                <button onclick="filterApprovals('EXPENSE')" id="filter-appr-EXPENSE"
+                  class="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-medium text-xs hover:bg-slate-50">
+                  Expenses
+                </button>
+                <button onclick="filterApprovals('PAYOUT')" id="filter-appr-PAYOUT"
+                  class="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-medium text-xs hover:bg-slate-50">
+                  Comp Payouts
+                </button>
+                <button onclick="filterApprovals('TASK')" id="filter-appr-TASK"
+                  class="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-medium text-xs hover:bg-slate-50">
+                  Task Deliverables
+                </button>
+              </div>
+              <div class="text-[11px] text-slate-500">
+                1-Click Director Signatory Clearance
+              </div>
+            </div>
+
+            <!-- Single Row-By-Row Master Approvals Table -->
+            <div
+              class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm overflow-x-auto">
+              <table class="w-full text-left text-xs">
+                <thead>
+                  <tr class="border-b border-slate-200 dark:border-slate-700 text-slate-500 font-semibold text-[11px]">
+                    <th class="py-2.5 px-3">Type</th>
+                    <th class="py-2.5 px-3">Item Title & Purpose</th>
+                    <th class="py-2.5 px-3">Submitted By</th>
+                    <th class="py-2.5 px-3">Project</th>
+                    <th class="py-2.5 px-3 text-right">Amount (Ã¢â€šÂ¹) / Scope</th>
+                    <th class="py-2.5 px-3 font-mono">Date</th>
+                    <th class="py-2.5 px-3 text-center">Status</th>
+                    <th class="py-2.5 px-3 text-right">Director Action</th>
+                  </tr>
+                </thead>
+                <tbody id="approvals-table-body" class="divide-y divide-slate-100 dark:divide-slate-800">
+                  <!-- Rendered dynamically by app.js -->
+                </tbody>
+              </table>
+            </div>
+
+          </section>
+
+          
+
+          <!-- ========================================== -->
+          <!-- VIEW 2: EMPLOYEE DASHBOARD                 -->
+          <!-- Compensation, payment history, projects, incentives -->
+          <!-- ========================================== -->
+          <section id="view-employee-dashboard" class="tab-view hidden space-y-6">
+
+            <div
+              class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
+              <div>
+                <div class="flex items-center gap-2">
+                  <span
+                    class="px-2 py-0.5 rounded text-[10px] font-black bg-[#026047] text-[#fffde8] uppercase tracking-wider">Tab
+                    2</span>
+                  <h2 class="text-base font-bold text-slate-900 dark:text-white">Employee Dashboard</h2>
+                </div>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Login-based view: Pranav (Founder oversight of all members) Ã¢â‚¬Â¢ Arshad & Vivek (Individual portfolios).
+                </p>
+              </div>
+              <!-- Authenticated Session Indicator -->
+              <div class="flex items-center gap-2">
+                <div id="emp-active-session-pill"
+                  class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-xs font-semibold text-emerald-800 dark:text-emerald-200 shadow-sm">
+                  <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span id="emp-active-session-text">Session: Pranav Bansode (Founder)</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Selected Employee Detail Dossier -->
+            <div id="employee-dossier-container" class="space-y-6">
+              <!-- Rendered dynamically by app.js -->
+            </div>
+
+          </section>
+
+          
+
+          <!-- ========================================== -->
+          <!-- VIEW: ASSIGN PROJECTS (FOUNDER VIEW)       -->
+          <!-- Work shared to employees                   -->
+          <!-- ========================================== -->
+          <section id="view-assign-projects" class="tab-view hidden space-y-6">
+
+            <div
+              class="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm gap-3">
+              <div>
+                <div class="flex items-center gap-2">
+                  <span
+                    class="px-2 py-0.5 rounded text-[10px] font-black bg-[#026047] text-[#fffde8] uppercase tracking-wider">Team Projects</span>
+                  <h2 class="text-base font-bold text-slate-900 dark:text-white">Assign Projects & Team Deliverables</h2>
+                </div>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Share, delegate and allocate work directly to Arshad Shaikh and Vivek Gajdhane. All shared tasks appear instantly in their Allocated Work tab.
+                </p>
+              </div>
+              <button onclick="openAssignTaskModal()"
+                class="px-3.5 py-1.5 rounded-lg bg-[#026047] text-[#fffde8] font-bold text-xs hover:bg-[#024d39] transition flex items-center gap-1.5 shadow-sm self-start sm:self-auto">
+                <span>+</span> Assign New Project / Task
+              </button>
+            </div>
+
+            <!-- Task Metric Cards -->
+            <div id="assign-projects-metrics-container" class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+              <!-- Rendered dynamically -->
+            </div>
+
+            <!-- Assigned Tasks Filter Toolbar -->
+            <div
+              class="flex flex-wrap items-center justify-between gap-2 p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-800 text-xs">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="text-slate-500 font-semibold text-[11px]">Filter Member:</span>
+                <select id="task-member-filter" onchange="renderAssignProjects()"
+                  class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-slate-800 dark:text-slate-200 text-xs">
+                  <option value="ALL">All Team Members</option>
+                  <option value="mem-02">Arshad Shaikh (Co-Founder)</option>
+                  <option value="mem-03">Vivek Gajdhane (Technical)</option>
+                </select>
+                <select id="task-status-filter" onchange="renderAssignProjects()"
+                  class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-slate-800 dark:text-slate-200 text-xs">
+                  <option value="ALL">All Statuses</option>
+                  <option value="assigned">Assigned</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="review_pending">Review Pending (Awaiting Approval)</option>
+                  <option value="completed">Completed & Verified</option>
+                </select>
+              </div>
+              <div class="text-[11px] text-slate-500">
+                Delegated tasks automatically sync with employee dashboards
+              </div>
+            </div>
+
+            <!-- Assigned Tasks Table / Cards -->
+            <div id="assign-projects-container" class="space-y-4">
+              <!-- Rendered dynamically by app.js -->
+            </div>
+
+          </section>
+
+          
+
+          <!-- ========================================== -->
+          <!-- VIEW: ALLOCATED WORK (EMPLOYEE VIEW)       -->
+          <!-- Work assigned by Founder Pranav            -->
+          <!-- ========================================== -->
+          <section id="view-allocated-work" class="tab-view hidden space-y-6">
+
+            <div
+              class="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm gap-3">
+              <div>
+                <div class="flex items-center gap-2">
+                  <span
+                    class="px-2 py-0.5 rounded text-[10px] font-black bg-[#026047] text-[#fffde8] uppercase tracking-wider">My Tasks</span>
+                  <h2 class="text-base font-bold text-slate-900 dark:text-white">Allocated Work & Deliverables</h2>
+                </div>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Tasks, milestones and project scopes assigned to you by Founder & Director Pranav Bansode.
+                </p>
+              </div>
+              <div id="allocated-work-session-pill"
+                class="px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300">
+                <!-- Dynamically populated -->
+              </div>
+            </div>
+
+            <!-- Allocated Work Metrics -->
+            <div id="allocated-work-metrics" class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+              <!-- Rendered dynamically -->
+            </div>
+
+            <!-- Allocated Work List -->
+            <div id="allocated-work-container" class="space-y-4">
+              <!-- Rendered dynamically by app.js -->
+            </div>
+
+          </section>
+
+          
+
+          <!-- ========================================== -->
+          <!-- VIEW 4: SALES DONE (PRODUCT SALES LEDGER)   -->
+          <!-- Product sales done across LeadX & SRM       -->
+          <!-- ========================================== -->
+          <section id="view-sales-done" class="tab-view hidden space-y-6">
+
+            <div
+              class="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm gap-3">
+              <div>
+                <div class="flex items-center gap-2">
+                  <span
+                    class="px-2 py-0.5 rounded text-[10px] font-black bg-[#026047] text-[#fffde8] uppercase tracking-wider">Point 4</span>
+                  <h2 class="text-base font-bold text-slate-900 dark:text-white">Sales Done (Product Revenue & Deals)</h2>
+                </div>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Complete record of closed client sales and contracts executed for LeadX and Smart Review Management products.
+                </p>
+              </div>
+              <div class="flex items-center gap-2 self-start sm:self-auto">
+                <button onclick="openNewIncomeModal()"
+                  class="px-3.5 py-1.5 rounded-lg bg-[#026047] text-[#fffde8] font-bold text-xs hover:bg-[#024d39] transition flex items-center gap-1.5 shadow-sm">
+                  <span>+</span> Record New Sale / Deal
+                </button>
+              </div>
+            </div>
+
+            <!-- Sales Done Dynamic Content in List Pattern -->
+            <div id="sales-done-container" class="space-y-6"></div>
+
+          </section>
+
+          
+
+          <!-- ========================================== -->
+          <!-- VIEW 3: PROJECTS (PROJECT MANAGEMENT)      -->
+          <!-- Vertical List Pattern: 1) LeadX & 2) Smart Review Management -->
+          <!-- ========================================== -->
+          <section id="view-projects" class="tab-view hidden space-y-4">
+
+            <!-- Rendered dynamically by app.js (Vertical List Format One-by-One) -->
+            <div id="projects-container" class="space-y-4">
+              <!-- Default static vertical list format -->
+              <div class="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+                <div class="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+                  <div class="relative flex-1 sm:w-64">
+                    <input
+                      type="text"
+                      placeholder="Search our designed products..."
+                      oninput="handleProjectSearch(this.value)"
+                      class="w-full pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:outline-none focus:border-[#026047]"
+                    />
+                    <span class="absolute left-2.5 top-2 text-slate-400">Ã°Å¸â€Â</span>
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <button onclick="filterProjectList('ALL')" id="filter-proj-ALL" class="px-2.5 py-1 rounded-lg bg-[#026047] text-[#fffde8] font-bold shadow-sm transition text-xs">
+                      All Products (2)
+                    </button>
+                    <button onclick="filterProjectList('B2B')" id="filter-proj-B2B" class="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 transition text-xs">
+                      1) LeadX
+                    </button>
+                    <button onclick="filterProjectList('AI')" id="filter-proj-AI" class="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 transition text-xs">
+                      2) Smart Review
+                    </button>
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-2 self-start sm:self-auto">
+                  <button onclick="switchTab('project-finance')"
+                    class="px-3.5 py-1.5 rounded-lg bg-[#fffde8] text-[#026047] border border-[#026047]/30 font-bold text-xs hover:bg-[#fff9c2] transition flex items-center gap-1.5 shadow-sm">
+                    <span>Ã°Å¸â€œÅ </span> View Financials
+                  </button>
+                  <button onclick="openNewProjectModal()"
+                    class="px-3.5 py-1.5 rounded-lg bg-[#026047] text-[#fffde8] font-bold text-xs hover:bg-[#024d39] transition">
+                    + New Product
+                  </button>
+                </div>
+              </div>
+
+              <!-- Product 1: LeadX (Minimal List Item 1) -->
+              <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between gap-3 hover:border-[#026047] transition">
+                <div class="flex items-center gap-3">
+                  <div class="w-9 h-9 rounded-xl bg-[#026047] text-[#fffde8] font-black text-xs flex items-center justify-center shadow-sm shrink-0">
+                    01
+                  </div>
+                  <div>
+                    <div class="flex items-center gap-2">
+                      <h3 class="text-sm font-bold text-slate-900 dark:text-white">1) LeadX</h3>
+                      <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#fffde8] text-[#026047] border border-[#026047]/30">PRJ-LEADX</span>
+                      
+                    </div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button onclick="switchTab('project-finance')"
+                    class="px-3 py-1.5 rounded-lg bg-[#fffde8] text-[#026047] border border-[#026047]/30 font-bold text-xs hover:bg-[#fff9c2] transition shadow-sm flex items-center gap-1">
+                    <span>Ã°Å¸â€œÅ </span> View Financials
+                  </button>
+                </div>
+              </div>
+
+              <!-- Product 2: Smart Review Management (Minimal List Item 2) -->
+              <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between gap-3 hover:border-[#026047] transition">
+                <div class="flex items-center gap-3">
+                  <div class="w-9 h-9 rounded-xl bg-[#026047] text-[#fffde8] font-black text-xs flex items-center justify-center shadow-sm shrink-0">
+                    02
+                  </div>
+                  <div>
+                    <div class="flex items-center gap-2">
+                      <h3 class="text-sm font-bold text-slate-900 dark:text-white">2) Smart Review Management</h3>
+                      <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#fffde8] text-[#026047] border border-[#026047]/30">PRJ-SRM</span>
+                      
+                    </div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button onclick="switchTab('project-finance')"
+                    class="px-3 py-1.5 rounded-lg bg-[#fffde8] text-[#026047] border border-[#026047]/30 font-bold text-xs hover:bg-[#fff9c2] transition shadow-sm flex items-center gap-1">
+                    <span>Ã°Å¸â€œÅ </span> View Financials
+                  </button>
+                </div>
+              </div>
+
+            </div>
+
+          </section>
+
+          
+
+          <!-- ========================================== -->
+          <!-- VIEW 4: PROJECT FINANCE                    -->
+          <!-- Separate financial tracking for LeadX & Smart Review -->
+          <!-- ========================================== -->
+          <section id="view-project-finance" class="tab-view hidden space-y-6">
+
+            <div
+              class="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm gap-3">
+              <div>
+                <h2 class="text-base font-bold text-slate-900 dark:text-white">Project Finance Tracking</h2>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Separate financial tracking for LeadX and
+                  Smart Review Management.</p>
+              </div>
+              <button onclick="openNewProjectModal()"
+                class="px-3.5 py-1.5 rounded-lg bg-[#026047] text-[#fffde8] font-bold text-xs hover:bg-[#024d39] self-start sm:self-auto">
+                + Add Project
+              </button>
+            </div>
+
+            <div id="project-finance-container" class="space-y-6">
+              <!-- Rendered dynamically by app.js -->
+            </div>
+
+          </section>
+
+          
+
+          <!-- ========================================== -->
+          <!-- VIEW 4: EXPENSE MANAGEMENT                 -->
+          <!-- Who spent money, why, for which project and approval status goes to founder & director -->
+          <!-- ========================================== -->
+          <section id="view-expense-management" class="tab-view hidden space-y-4">
+
+            <div
+              class="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm gap-3">
+              <div>
+                <div class="flex items-center gap-2">
+                  <span
+                    class="px-2 py-0.5 rounded text-[10px] font-black bg-[#026047] text-[#fffde8] uppercase tracking-wider">Tab
+                    4</span>
+                  <h2 class="text-base font-bold text-slate-900 dark:text-white">Expense Management</h2>
+                </div>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Who spent money, why, for which project &mdash; all expense approvals route strictly to Founder &
+                  Director.
+                </p>
+              </div>
+              <button onclick="openNewExpenseModal()"
+                class="px-3.5 py-1.5 rounded-lg bg-rose-700 hover:bg-rose-800 text-white font-bold text-xs self-start sm:self-auto flex items-center gap-1.5 shadow-sm">
+                <span>+</span> Record Expense
+              </button>
+            </div>
+
+            <!-- Expense Summary Cards -->
+            <div id="expense-metrics-container" class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <!-- Dynamically populated -->
+            </div>
+
+            <!-- Expense Filter Toolbar -->
+            <div
+              class="flex flex-wrap items-center justify-between gap-2 p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-800 text-xs">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="text-slate-500 font-semibold text-[11px]">Filter:</span>
+                <select id="expense-project-filter" onchange="renderExpenseManagement()"
+                  class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-slate-800 dark:text-slate-200 text-xs">
+                  <option value="ALL">All Projects</option>
+                  <option value="PRJ-LEADX">LeadX</option>
+                  <option value="PRJ-SRM">Smart Review Management</option>
+                  <option value="GENERAL">General Operations</option>
+                </select>
+                <select id="expense-status-filter" onchange="renderExpenseManagement()"
+                  class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-slate-800 dark:text-slate-200 text-xs">
+                  <option value="ALL">All Statuses</option>
+                  <option value="PENDING">Pending Founder Approval</option>
+                  <option value="APPROVED">Approved by Director</option>
+                </select>
+              </div>
+              <div class="text-[11px] text-slate-500">
+                Founder Approval required before cash disbursement.
+              </div>
+            </div>
+
+            <!-- Detailed Expense Table -->
+            <div
+              class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm overflow-x-auto">
+              <table class="w-full text-left text-xs">
+                <thead>
+                  <tr class="border-b border-slate-200 dark:border-slate-700 text-slate-500 font-semibold text-[11px]">
+                    <th class="py-2.5 px-3">Date</th>
+                    <th class="py-2.5 px-3">Who Spent Money</th>
+                    <th class="py-2.5 px-3">Why (Title & Purpose)</th>
+                    <th class="py-2.5 px-3">Which Project</th>
+                    <th class="py-2.5 px-3 text-right">Amount (Ã¢â€šÂ¹)</th>
+                    <th class="py-2.5 px-3 text-center">Approval Status</th>
+                    <th class="py-2.5 px-3 text-right">Director Action</th>
+                  </tr>
+                </thead>
+                <tbody id="expense-table-body">
+                  <!-- Rendered by app.js -->
+                </tbody>
+              </table>
+            </div>
+
+          </section>
+
+          
+
+          <!-- ========================================== -->
+          <!-- VIEW 5: FINANCIAL SUMMARY                  -->
+          <!-- Monthly company performance and project-wise profit/loss -->
+          <!-- ========================================== -->
+          <section id="view-financial-summary" class="tab-view hidden space-y-6">
+
+            <div
+              class="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm gap-3">
+              <div>
+                <div class="flex items-center gap-2">
+                  <span
+                    class="px-2 py-0.5 rounded text-[10px] font-black bg-[#026047] text-[#fffde8] uppercase tracking-wider">Tab
+                    5</span>
+                  <h2 class="text-base font-bold text-slate-900 dark:text-white">Financial Summary</h2>
+                </div>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Monthly company performance, solvency health, and project-wise profit & loss.
+                </p>
+              </div>
+              <div class="flex items-center gap-2 self-start sm:self-auto">
+                <button onclick="exportFinancialReport('csv')"
+                  class="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-700">
+                  Export CSV
+                </button>
+                <button onclick="window.print()"
+                  class="px-3 py-1.5 rounded-lg bg-[#026047] text-[#fffde8] text-xs font-bold hover:bg-[#024d39] flex items-center gap-1.5">
+                  <span>Ã°Å¸â€“Â¨Ã¯Â¸Â</span> Print P&L Report
+                </button>
+              </div>
+            </div>
+
+            <!-- High-level KPI Banner -->
+            <div id="financial-summary-kpis" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <!-- Dynamically populated -->
+            </div>
+
+            <!-- Project-wise Profit & Loss (P&L) Section -->
+            <div
+              class="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+              <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+                <div>
+                  <h3 class="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">Project-Wise
+                    Profit / Loss (P&L) Breakdown</h3>
+                  <p class="text-[11px] text-slate-500">Live comparison between LeadX and Smart Review Management</p>
+                </div>
+                <span
+                  class="text-[10px] px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200">Accrual
+                  Basis</span>
+              </div>
+              <div id="project-wise-pnl-container" class="overflow-x-auto">
+                <!-- Rendered by app.js -->
+              </div>
+            </div>
+
+            <!-- Monthly Company Performance -->
+            <div
+              class="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+              <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+                <div>
+                  <h3 class="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">Monthly Company
+                    Performance Ledger</h3>
+                  <p class="text-[11px] text-slate-500">Month-over-month company revenue, approved expenses, and net
+                    retained earnings</p>
+                </div>
+                <span class="text-[10px] font-mono text-slate-400">FY 2026-27</span>
+              </div>
+              <div id="monthly-performance-container" class="overflow-x-auto">
+                <!-- Rendered by app.js -->
+              </div>
+            </div>
+
+            <!-- Capital Reserves & Ring-Fencing Breakdown -->
+            <div
+              class="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+              <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+                <div>
+                  <h3 class="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">Company Capital
+                    Reserves & Ring-Fencing</h3>
+                  <p class="text-[11px] text-slate-500">Earmarked reserves vs unencumbered lighthearted operating cash
+                  </p>
+                </div>
+              </div>
+              <div id="reserves-breakdown-container" class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <!-- Rendered by app.js -->
+              </div>
+            </div>
+
+          </section>
+
+        
+
+          
+
+          
+
+        </main>
+
+      </div>
+
+    </div> <!-- End of #app-workspace -->
+
+    <!-- ========================================== -->
+    <!-- MODAL: ADD PROJECT                         -->
+    <!-- ========================================== -->
+    <div id="modal-new-project"
+      class="hidden fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+      <div
+        class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-5 shadow-xl space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+          <h3 class="font-bold text-sm text-slate-900 dark:text-white">Add New Project</h3>
+          <button onclick="closeNewProjectModal()"
+            class="text-slate-400 hover:text-slate-700 dark:hover:text-white text-lg font-bold">&times;</button>
+        </div>
+        <div class="space-y-3 text-xs">
+          <div>
+            <label class="block text-slate-600 dark:text-slate-400 mb-1">Project Name</label>
+            <input id="prj-name" type="text" placeholder="e.g. LeadX Automation"
+              class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-[#026047]" />
+          </div>
+          <div>
+            <label class="block text-slate-600 dark:text-slate-400 mb-1">Description</label>
+            <textarea id="prj-desc" rows="2" placeholder="Brief project scope & objectives..."
+              class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-[#026047]"></textarea>
+          </div>
+          <div>
+            <label class="block text-slate-600 dark:text-slate-400 mb-1">Approved Incentive Percentage (%)</label>
+            <input id="prj-incentive" type="number" value="10"
+              class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-[#026047]" />
+          </div>
+        </div>
+        <div class="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+          <button onclick="closeNewProjectModal()"
+            class="px-3 py-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs">Cancel</button>
+          <button onclick="submitNewProject()"
+            class="px-4 py-1.5 rounded-lg bg-[#026047] text-[#fffde8] font-bold text-xs hover:bg-[#024d39]">Create
+            Project</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL: ADD INCOME                          -->
+    <!-- ========================================== -->
+    <div id="modal-new-income"
+      class="hidden fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+      <div
+        class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-5 shadow-xl space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+          <h3 class="font-bold text-sm text-slate-900 dark:text-white">Record Client Income</h3>
+          <button onclick="closeNewIncomeModal()"
+            class="text-slate-400 hover:text-slate-700 dark:hover:text-white text-lg font-bold">&times;</button>
+        </div>
+        <div class="space-y-3 text-xs">
+          <div
+            class="p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-[11px] text-amber-800 dark:text-amber-300 flex items-start gap-2">
+            <i data-lucide="shield-alert" class="w-4 h-4 shrink-0 mt-0.5 text-amber-600"></i>
+            <span><strong>Director Approval Policy:</strong> Every enrolled income entry requires explicit authorization
+              by <strong>Pranav Bansode (Founder / Director)</strong> before funds are credited to Available Company
+              Cash.</span>
+          </div>
+          <div>
+            <label class="block text-slate-600 dark:text-slate-400 mb-1">Client Name</label>
+            <input id="inc-client" type="text" placeholder="Enter client company name..."
+              class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-[#026047]" />
+          </div>
+          <div>
+            <label class="block text-slate-600 dark:text-slate-400 mb-1">Related Project</label>
+            <select id="inc-project"
+              class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-[#026047]">
+              <option value="prj-leadx">LeadX</option>
+              <option value="prj-srm">Smart Review Management</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-slate-600 dark:text-slate-400 mb-1">Amount (Ã¢â€šÂ¹)</label>
+            <input id="inc-amount" type="number" placeholder="10000"
+              class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-[#026047]" />
+          </div>
+          <div>
+            <label class="block text-slate-600 dark:text-slate-400 mb-1">Payment Method</label>
+            <select id="inc-method"
+              class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-[#026047]">
+              <option value="bank_transfer">Bank Transfer (NEFT/RTGS)</option>
+              <option value="upi">UPI</option>
+              <option value="cheque">Cheque</option>
+              <option value="card">Card / Razorpay</option>
+            </select>
+          </div>
+        </div>
+        <div class="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+          <button onclick="closeNewIncomeModal()"
+            class="px-3 py-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 text-xs">Cancel</button>
+          <button onclick="submitNewIncome()"
+            class="px-4 py-1.5 rounded-lg bg-[#026047] text-[#fffde8] font-bold text-xs hover:bg-[#024d39]">Submit for
+            Approval</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL: ADD EXPENSE                         -->
+    <!-- ========================================== -->
+    <div id="modal-new-expense"
+      class="hidden fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+      <div
+        class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-5 shadow-xl space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+          <h3 class="font-bold text-sm text-slate-900 dark:text-white">Record Operating Expense</h3>
+          <button onclick="closeNewExpenseModal()"
+            class="text-slate-400 hover:text-slate-700 dark:hover:text-white text-lg font-bold">&times;</button>
+        </div>
+        <div class="space-y-3 text-xs">
+          <div>
+            <label class="block text-slate-600 dark:text-slate-400 mb-1">Expense Title</label>
+            <input id="exp-title" type="text" placeholder="e.g. AWS Cluster Nodes"
+              class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-[#026047]" />
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-slate-600 dark:text-slate-400 mb-1">Category</label>
+              <select id="exp-category"
+                class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-[#026047]">
+                <option value="technical_infrastructure">Technical Infra</option>
+                <option value="marketing_business">Marketing & Business</option>
+                <option value="software_tools">Software & Tools</option>
+                <option value="team_compensation">Compensation</option>
+                <option value="administrative">Administrative</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-slate-600 dark:text-slate-400 mb-1">Related Project</label>
+              <select id="exp-project"
+                class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-[#026047]">
+                <option value="prj-leadx">LeadX</option>
+                <option value="prj-srm">Smart Review Management</option>
+                <option value="">General Company</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label class="block text-slate-600 dark:text-slate-400 mb-1">Amount (Ã¢â€šÂ¹)</label>
+            <input id="exp-amount" type="number" placeholder="5000"
+              class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-[#026047]" />
+          </div>
+          <div>
+            <label class="block text-slate-600 dark:text-slate-400 mb-1">Description / Notes</label>
+            <input id="exp-desc" type="text" placeholder="Purpose of this cost..."
+              class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-[#026047]" />
+          </div>
+        </div>
+        <div class="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+          <button onclick="closeNewExpenseModal()"
+            class="px-3 py-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 text-xs">Cancel</button>
+          <button onclick="submitNewExpense()"
+            class="px-4 py-1.5 rounded-lg bg-rose-700 hover:bg-rose-800 text-white font-bold text-xs">Submit
+            Expense</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL: ASSIGN PROJECT / TASK (FOUNDER)     -->
+    <!-- ========================================== -->
+    <div id="modal-assign-task"
+      class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+      <div
+        class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+          <div class="flex items-center gap-2">
+            <span class="p-2 rounded-lg bg-[#026047]/10 text-[#026047] dark:bg-emerald-950 dark:text-emerald-300">Ã°Å¸â€œÅ’</span>
+            <div>
+              <h3 class="font-bold text-sm text-slate-900 dark:text-white">Assign Project Work / Deliverable</h3>
+              <p class="text-[11px] text-slate-500">Delegated directly by Founder & Director Pranav Bansode</p>
+            </div>
+          </div>
+          <button onclick="closeAssignTaskModal()"
+            class="text-slate-400 hover:text-slate-700 dark:hover:text-white text-xl font-bold">&times;</button>
+        </div>
+
+        <form onsubmit="event.preventDefault(); submitAssignTask();" class="space-y-3 text-xs">
+          <div>
+            <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Work Title / Scope</label>
+            <input type="text" id="task-title" required placeholder="e.g. LeadX Prospect Qualification Funnel"
+              class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-[#026047]" />
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Assign To Member</label>
+              <select id="task-assigned-to" required
+                class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-[#026047]">
+                <option value="mem-02">Arshad Shaikh (Co-Founder / Marketing)</option>
+                <option value="mem-03">Vivek Gajdhane (Technical Dept)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Associated Project</label>
+              <select id="task-project" required
+                class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-[#026047]">
+                <option value="prj-leadx">LeadX</option>
+                <option value="prj-srm">Smart Review Management</option>
+                <option value="general">General Operations</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Priority Level</label>
+              <select id="task-priority"
+                class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-[#026047]">
+                <option value="medium">Medium Priority</option>
+                <option value="high">High Priority</option>
+                <option value="urgent">Urgent / Critical</option>
+              </select>
+            </div>
+            <div>
+              <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Deadline / Due Date</label>
+              <input type="date" id="task-due-date" required
+                class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-[#026047]" />
+            </div>
+          </div>
+
+          <div>
+            <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Deliverable Instructions & Requirements</label>
+            <textarea id="task-desc" rows="3" required placeholder="Specify detailed requirements, acceptance criteria and expected deliverable..."
+              class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-[#026047]"></textarea>
+          </div>
+
+          <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <button type="button" onclick="closeAssignTaskModal()"
+              class="px-4 py-2 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold">
+              Cancel
+            </button>
+            <button type="submit"
+              class="px-4 py-2 rounded-lg bg-[#026047] text-[#fffde8] font-bold text-xs hover:bg-[#024d39] transition shadow-sm">
+              Assign & Notify Member
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL: INVOICE & PAYMENT RECEIPT           -->
+    <!-- ========================================== -->
+    <div id="modal-invoice"
+      class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+      <div
+        class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4 my-8">
+        <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+          <div class="flex items-center gap-2">
+            <span class="p-2 rounded-lg bg-[#026047]/10 text-[#026047] dark:bg-emerald-950 dark:text-emerald-300">
+              <i data-lucide="file-check" class="w-5 h-5"></i>
+            </span>
+            <div>
+              <h3 class="font-bold text-sm text-slate-900 dark:text-white">Official Payment Invoice & Receipt</h3>
+              <p class="text-[11px] text-slate-500">Approved by Founder / Director Ã¢â‚¬Â¢ Phoenix Tech Solutions Private
+                Limited</p>
+            </div>
+          </div>
+          <button onclick="closeInvoiceModal()"
+            class="text-slate-400 hover:text-slate-700 dark:hover:text-white text-xl font-bold">&times;</button>
+        </div>
+
+        <!-- Printable Invoice Body -->
+        <div id="invoice-render-content" class="space-y-4">
+          <!-- Rendered dynamically by app.js -->
+        </div>
+
+        <!-- Footer Actions -->
+        <div
+          class="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+          <div class="text-[11px] text-slate-500">
+            Status: <strong class="text-emerald-700 dark:text-emerald-400">Approved & Verified</strong>
+          </div>
+          <div class="flex items-center gap-2">
+            <button onclick="closeInvoiceModal()"
+              class="px-3.5 py-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold">
+              Close
+            </button>
+            <button onclick="printCurrentInvoice()"
+              class="px-3.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold inline-flex items-center gap-1.5">
+              <i data-lucide="printer" class="w-3.5 h-3.5"></i> Print / Save PDF
+            </button>
+            <button onclick="downloadCurrentInvoice()"
+              class="px-4 py-1.5 rounded-lg bg-[#026047] text-[#fffde8] font-bold text-xs hover:bg-[#024d39] shadow-sm inline-flex items-center gap-1.5">
+              <i data-lucide="download" class="w-3.5 h-3.5"></i> Download Invoice
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Supabase Client Library -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+      window.PHOENIX_SUPABASE_CONFIG = {
+        url: 'https://mvdknbfisgrwewljqnxw.supabase.co',
+        anonKey: 'sb_publishable_W_QNdDR7wpYjgmZJQ_Bjsw_iS3TxZPA'
+      };
+    </script>
+    <script src="supabaseClient.js"></script>
+    <script src="app.js"></script>
+  </body>
+
+</html>
