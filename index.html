@@ -738,7 +738,7 @@
                   <h2 class="text-base font-bold text-slate-900 dark:text-white">Assign Projects & Team Deliverables</h2>
                 </div>
                 <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Share, delegate and allocate work directly to Arshad Shaikh and Vivek Gajdhane. All shared tasks appear instantly in their Allocated Work tab.
+                  Share, delegate and allocate work directly to department teams (Technical, Commercial &amp; Marketing, Research &amp; Scouting). All shared tasks appear instantly in their Allocated Work tab.
                 </p>
               </div>
               <button onclick="openAssignTaskModal()"
@@ -756,13 +756,13 @@
             <div
               class="flex flex-wrap items-center justify-between gap-2 p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-800 text-xs">
               <div class="flex flex-wrap items-center gap-2">
-                <span class="text-slate-500 font-semibold text-[11px]">Filter Member:</span>
+                <span class="text-slate-500 font-semibold text-[11px]">Filter Department:</span>
                 <select id="task-member-filter" onchange="renderAssignProjects()"
                   class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-slate-800 dark:text-slate-200 text-xs">
-                  <option value="ALL">All Team Members</option>
-                  <option value="mem-02">Arshad Shaikh (Co-Founder)</option>
-                  <option value="mem-03">Vivek Gajdhane (Technical)</option>
-                  <option value="mem-04">Aryan Bhore (Research Lead)</option>
+                  <option value="ALL">All Departments</option>
+                  <option value="mem-03">Technical Department</option>
+                  <option value="mem-02">Commercial &amp; Marketing Department</option>
+                  <option value="mem-04">Research &amp; Scouting Department</option>
                 </select>
                 <select id="task-status-filter" onchange="renderAssignProjects()"
                   class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-slate-800 dark:text-slate-200 text-xs">
@@ -1315,12 +1315,12 @@
 
           <div class="grid grid-cols-2 gap-3">
             <div>
-              <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Assign To Member</label>
+              <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Assign To Department</label>
               <select id="task-assigned-to" required
                 class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-[#026047]">
-                <option value="mem-02">Arshad Shaikh (Co-Founder / Marketing)</option>
-                <option value="mem-03">Vivek Gajdhane (Technical Dept)</option>
-                <option value="mem-04">Aryan Bhore (Research Lead)</option>
+                <option value="mem-03">Technical Department</option>
+                <option value="mem-02">Commercial &amp; Marketing Department</option>
+                <option value="mem-04">Research &amp; Scouting Department</option>
               </select>
             </div>
             <div>
@@ -1582,7 +1582,7 @@
             </span>
             <div>
               <h3 class="font-bold text-sm text-slate-900 dark:text-white">Founder Project Allocation</h3>
-              <p class="text-[11px] text-slate-500">Allocate Technical Architecture & Development to Vivek</p>
+              <p class="text-[11px] text-slate-500">Allocate Technical Architecture &amp; Development to Technical Department</p>
             </div>
           </div>
           <button onclick="closeAllocateLeadModal()"
@@ -1604,8 +1604,8 @@
           </div>
 
           <div>
-            <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Assignee</label>
-            <input type="text" disabled value="Vivek Gajdhane (Technical Department)"
+            <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Assignee Department</label>
+            <input type="text" disabled value="💻 Technical Department"
               class="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-100 dark:bg-slate-800 text-xs font-bold text-purple-700 dark:text-purple-300" />
           </div>
 
@@ -1792,9 +1792,9 @@
               <span class="px-2 py-0.5 rounded text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-950 font-bold">Ready for Market Clearance</span>
             </div>
             <div id="delivery-lead-flow-summary" class="space-y-1.5 text-[11px] text-slate-600 dark:text-slate-300 border-t border-slate-200 dark:border-slate-700 pt-2">
-              <div>&bull; <strong>1. Scouted by Aryan:</strong> <span id="delivery-lead-scout">Aryan Bhore</span></div>
-              <div>&bull; <strong>2. Technical Engineering:</strong> <span id="delivery-lead-tech">Vivek Gajdhane (Completed)</span></div>
-              <div>&bull; <strong>3. Commercial Packaging:</strong> <span id="delivery-lead-marketing">Arshad Shaikh (Completed)</span></div>
+              <div>&bull; <strong>1. Research &amp; Scouting:</strong> <span id="delivery-lead-scout">Research &amp; Scouting Department</span></div>
+              <div>&bull; <strong>2. Technical Engineering:</strong> <span id="delivery-lead-tech">Technical Department (Completed)</span></div>
+              <div>&bull; <strong>3. Commercial Packaging:</strong> <span id="delivery-lead-marketing">Commercial &amp; Marketing Department (Completed)</span></div>
             </div>
           </div>
 
