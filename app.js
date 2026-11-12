@@ -907,8 +907,7 @@ function renderSidebarNav(activeTab) {
       </button>
     `;
   } else if (currentRole === 'aryan') {
-    // Aryan: Lead Acquisition & Business Development (same UI structure as Vivek)
-    const myLeadsCount = (STATE.leads || []).length;
+    // Aryan: Personal Workspace (clean, designation-free, real-time pipeline)
     nav.innerHTML = `
       <!-- Section: Personal Hub -->
       <div class="px-3 pt-1 pb-1 text-[10px] font-bold uppercase tracking-wider text-[#fffde8]/60 flex items-center gap-1.5">
@@ -918,8 +917,8 @@ function renderSidebarNav(activeTab) {
       <button data-nav="employee-dashboard" class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl ${activeTab === 'employee-dashboard' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
         <span class="text-sm">🎯</span>
         <div class="flex-1 min-w-0">
-          <div class="truncate font-black">1. My Workspace & Leads</div>
-          <div class="text-[9px] opacity-75 truncate font-normal">Research Desk & Lead Queue</div>
+          <div class="truncate font-black">1. My Workspace</div>
+          <div class="text-[9px] opacity-75 truncate font-normal">Personal Portfolio &amp; Deals</div>
         </div>
       </button>
 
@@ -927,10 +926,10 @@ function renderSidebarNav(activeTab) {
         <span class="text-sm">📌</span>
         <div class="flex-1 min-w-0">
           <div class="truncate font-black flex items-center justify-between">
-            <span>2. Lead Pipeline & Work</span>
-            <span class="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-white/20 text-white">${myLeadsCount}</span>
+            <span>2. Allocated Work</span>
+            <span class="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-white/20 text-white">${myAssignedTasksCount}</span>
           </div>
-          <div class="text-[9px] opacity-75 truncate font-normal">Active Deals & Founder Route</div>
+          <div class="text-[9px] opacity-75 truncate font-normal">Tasks Delegated by Founder</div>
         </div>
       </button>
 
@@ -1088,6 +1087,7 @@ function updateRoleDisplay() {
       desigBadge.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-[#fffde8] text-[#026047] shadow-sm';
     }
     if (authBox) {
+      authBox.classList.remove('hidden');
       authBox.innerHTML = `
         <div class="flex items-center justify-between text-[#fffde8] font-bold">
           <span class="opacity-75 text-[9px] uppercase tracking-wider">Executive Authority</span>
@@ -1129,6 +1129,7 @@ function updateRoleDisplay() {
       desigBadge.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-[#fffde8]/20 text-[#fffde8] border border-[#fffde8]/40';
     }
     if (authBox) {
+      authBox.classList.remove('hidden');
       authBox.innerHTML = `
         <div class="flex items-center justify-between text-[#fffde8] font-bold">
           <span class="opacity-75 text-[9px] uppercase tracking-wider">Departmental Scope</span>
@@ -1164,26 +1165,18 @@ function updateRoleDisplay() {
       crownBadge.className = 'absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center text-[10px] font-bold shadow ring-1 ring-emerald-300';
     }
     if (desigBadge) {
-      desigBadge.innerHTML = 'RESEARCH LEAD';
-      desigBadge.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-[#fffde8]/20 text-[#fffde8] border border-[#fffde8]/40';
+      desigBadge.innerHTML = '';
+      desigBadge.className = 'hidden';
     }
     if (authBox) {
-      authBox.innerHTML = `
-        <div class="flex items-center justify-between text-[#fffde8] font-bold">
-          <span class="opacity-75 text-[9px] uppercase tracking-wider">Departmental Scope</span>
-          <span class="text-[9px] text-emerald-300">Research Lead</span>
-        </div>
-        <p class="text-[10px] text-[#fffde8]/80 leading-tight">
-          Market Research, Client Prospecting & Pipeline Strategy
-        </p>
-      `;
+      authBox.innerHTML = '';
+      authBox.className = 'hidden';
     }
-    if (currentRoleLabel) currentRoleLabel.innerHTML = '🎯 Research Lead';
+    if (currentRoleLabel) currentRoleLabel.innerHTML = '🎯 Aryan Bhore';
     if (topbarPill) {
       topbarPill.innerHTML = `
         <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
         <span class="font-extrabold text-emerald-700 dark:text-emerald-300">Aryan Bhore</span>
-        <span class="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300">🎯 Research Lead</span>
       `;
     }
     if (btnCsv) btnCsv.classList.add('hidden');
@@ -1207,6 +1200,7 @@ function updateRoleDisplay() {
       desigBadge.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-[#fffde8]/20 text-[#fffde8] border border-[#fffde8]/40';
     }
     if (authBox) {
+      authBox.classList.remove('hidden');
       authBox.innerHTML = `
         <div class="flex items-center justify-between text-[#fffde8] font-bold">
           <span class="opacity-75 text-[9px] uppercase tracking-wider">Departmental Scope</span>
@@ -2236,9 +2230,14 @@ function renderEmployeeDashboard(memberId) {
           <span class="w-2 h-2 rounded-full ${isArshad ? 'bg-blue-500' : (isAryan ? 'bg-emerald-500' : 'bg-purple-500')}"></span>
           <span class="text-slate-500 dark:text-slate-400">Authenticated Session:</span>
           <span class="font-extrabold text-slate-900 dark:text-white">${escapeHtml(mem.name)}</span>
+          ${
+            !isAryan
+              ? `
           <span class="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${badgeColorClass}">
             ${roleEmoji} ${escapeHtml(mem.designation)}
-          </span>
+          </span>`
+              : ''
+          }
         </div>
         <div class="text-[11px] text-slate-500 dark:text-slate-400">
           Private Individual Portfolio &bull; Company Executive Drawings Confidential
@@ -2253,11 +2252,20 @@ function renderEmployeeDashboard(memberId) {
               ${initials}
             </div>
             <div>
+              ${
+                !isAryan
+                  ? `
               <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 mb-1">
                 <span>${roleEmoji}</span> ${escapeHtml(mem.designation.toUpperCase())}
-              </div>
+              </div>`
+                  : ''
+              }
               <h2 class="text-xl font-black text-slate-900 dark:text-white">${escapeHtml(mem.name)}</h2>
-              <p class="text-xs text-slate-500 dark:text-slate-400">Phoenix Tech Solutions Private Limited</p>
+              ${
+                !isAryan
+                  ? `<p class="text-xs text-slate-500 dark:text-slate-400">Phoenix Tech Solutions Private Limited</p>`
+                  : ''
+              }
             </div>
           </div>
           ${
@@ -2274,31 +2282,50 @@ function renderEmployeeDashboard(memberId) {
 
       ${
         isAryan
-          ? `
-      <!-- Aryan Deal & Lead Pipeline Metrics -->
+          ? (() => {
+              const activeIncomeDeals = (STATE.income || []).filter(
+                (i) => i.status !== 'rejected' && matchesDateFilter(i.paymentDate)
+              );
+              const realTimeIncomeVal = activeIncomeDeals.reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
+              const activeLeadDeals = (STATE.leads || []).filter((l) => l.status !== 'rejected');
+              const realTimeLeadsVal = activeLeadDeals.reduce((sum, l) => sum + (Number(l.dealValue) || 0), 0);
+              const realTimePipelineVal = realTimeIncomeVal > 0 ? realTimeIncomeVal : realTimeLeadsVal;
+              const realTimeTotalDeals = activeIncomeDeals.length > 0 ? activeIncomeDeals.length : activeLeadDeals.length;
+              const realTimeClosedVal = (STATE.income || [])
+                .filter((i) => i.status === 'received' && matchesDateFilter(i.paymentDate))
+                .reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
+
+              return `
+      <!-- Aryan Deal & Lead Pipeline Metrics (Real-Time Live Calculation) -->
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div class="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
-          <span class="text-xs text-slate-400 font-medium">Scouted Client Leads</span>
-          <div class="text-xl font-bold text-slate-900 dark:text-white">${(STATE.leads || []).length} Leads</div>
-          <div class="text-[11px] text-slate-500 pt-1">Total deal prospects introduced</div>
+          <span class="text-xs text-slate-400 font-medium">Active Client Deals</span>
+          <div class="text-xl font-bold text-slate-900 dark:text-white">${realTimeTotalDeals} Deals</div>
+          <div class="text-[11px] text-slate-500 pt-1">Live active client contract portfolio</div>
         </div>
 
         <div class="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
-          <span class="text-xs text-slate-400 font-medium">Pipeline Deal Value</span>
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-slate-400 font-medium">Pipeline Deal Value</span>
+            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-[#026047] dark:bg-emerald-950 dark:text-emerald-300 animate-pulse">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Live Real-Time
+            </span>
+          </div>
           <div class="text-xl font-bold text-[#026047] dark:text-emerald-400">
-            ${formatINR((STATE.leads || []).reduce((sum, l) => sum + (Number(l.dealValue) || 0), 0))}
+            ${formatINR(realTimePipelineVal)}
           </div>
-          <div class="text-[11px] text-slate-500 pt-1">Estimated contract portfolio</div>
+          <div class="text-[11px] text-slate-500 pt-1">Real-time aggregate valuation of all pipeline deals</div>
         </div>
 
         <div class="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
-          <span class="text-xs text-slate-400 font-medium">Delivered &amp; Signed Deals</span>
+          <span class="text-xs text-slate-400 font-medium">Delivered / Received Inflow</span>
           <div class="text-xl font-black text-[#026047] dark:text-emerald-400">
-            ${(STATE.leads || []).filter((l) => l.status === 'approved_for_delivery').length} Closed
+            ${formatINR(realTimeClosedVal)}
           </div>
-          <div class="text-[11px] text-slate-500 pt-1">Founder final sign-off achieved</div>
+          <div class="text-[11px] text-slate-500 pt-1">Reconciled company revenue from closed deals</div>
         </div>
-      </div>`
+      </div>`;
+            })()
           : `
       <!-- Compensation & Payouts Cards -->
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -2441,8 +2468,6 @@ function renderEmployeeDashboard(memberId) {
           </div>
         </div>
       </div>
-
-      ${renderLeadPipelineSection()}
     `;
   }
 }
@@ -2668,10 +2693,6 @@ function renderApprovals() {
     `;
       })
       .join('');
-  }
-
-  if (leadPipeEl) {
-    leadPipeEl.innerHTML = renderLeadPipelineSection();
   }
 }
 window.renderApprovals = renderApprovals;
@@ -3320,10 +3341,6 @@ function renderAllocatedWork() {
       })
       .join('');
   }
-
-  if (leadPipeEl) {
-    leadPipeEl.innerHTML = renderLeadPipelineSection();
-  }
 }
 window.renderAllocatedWork = renderAllocatedWork;
 
@@ -3392,82 +3409,7 @@ window.updateTaskStatus = updateTaskStatus;
 // ==============================================================================
 
 function renderLeadPipelineSection() {
-  const currentRole = STATE.activeRole || 'pranav';
-  const leads = STATE.leads || [];
-
-  const totalLeads = leads.length;
-  const awaitingAllocation = leads.filter((l) => l.status === 'submitted_to_founder').length;
-  const inTechDev = leads.filter((l) => l.status === 'allocated_to_vivek').length;
-  const awaitingFinalSignoff = leads.filter((l) => l.status === 'sent_to_arshad_notified_founder').length;
-  const approvedCount = leads.filter((l) => l.status === 'approved_for_delivery').length;
-
-  return `
-    <div class="mt-6 p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
-      <!-- Section Header -->
-      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
-        <div>
-          <div class="flex items-center gap-2">
-            <span class="p-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-950 text-[#026047] dark:text-emerald-300 text-base">🎯</span>
-            <h3 class="text-base font-black text-slate-900 dark:text-white">Client Acquisition &amp; 4-Step Delivery Pipeline</h3>
-            <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#fffde8] text-[#026047] border border-[#026047]/30">4-STAGE PIPELINE</span>
-          </div>
-          <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            <strong>Stage 1:</strong> Aryan (Scout) ➔ <strong>Stage 2:</strong> Pranav (Allocate to Vivek) ➔ <strong>Stage 3:</strong> Vivek (Tech Dev ➔ Forward to Arshad &amp; Notify Pranav) ➔ <strong>Stage 4:</strong> Pranav (Final Delivery Approval)
-          </p>
-        </div>
-        <div class="flex items-center gap-2 self-start sm:self-auto flex-wrap">
-          <button onclick="openNewLeadModal()"
-            class="px-3.5 py-1.5 rounded-xl bg-[#026047] text-[#fffde8] font-bold text-xs hover:bg-[#024d39] transition shadow-sm flex items-center gap-1.5 cursor-pointer">
-            <span>+</span>
-            <span>Submit Client Lead</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- Pipeline Status Metric Pills -->
-      <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
-        <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800">
-          <span class="text-[10px] text-slate-400 uppercase font-bold">Total Deals</span>
-          <div class="text-lg font-black text-slate-900 dark:text-white mt-0.5">${totalLeads} Leads</div>
-          <span class="text-[10px] text-slate-500 block mt-0.5">Scouted by Aryan</span>
-        </div>
-        <div class="p-3 rounded-xl ${awaitingAllocation > 0 ? 'bg-amber-50 dark:bg-amber-950/30 border border-amber-300' : 'bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800'}">
-          <span class="text-[10px] text-amber-700 dark:text-amber-400 uppercase font-bold">Stage 1: To Allocate</span>
-          <div class="text-lg font-black text-amber-600 dark:text-amber-400 mt-0.5">${awaitingAllocation} Leads</div>
-          <span class="text-[10px] text-amber-700 dark:text-amber-300 block mt-0.5">Founder Pranav's Queue</span>
-        </div>
-        <div class="p-3 rounded-xl ${inTechDev > 0 ? 'bg-purple-50 dark:bg-purple-950/30 border border-purple-300' : 'bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800'}">
-          <span class="text-[10px] text-purple-700 dark:text-purple-400 uppercase font-bold">Stage 2: Tech Dev</span>
-          <div class="text-lg font-black text-purple-600 dark:text-purple-400 mt-0.5">${inTechDev} In Build</div>
-          <span class="text-[10px] text-purple-600 dark:text-purple-300 block mt-0.5">Vivek's Workdesk</span>
-        </div>
-        <div class="p-3 rounded-xl ${awaitingFinalSignoff > 0 ? 'bg-blue-50 dark:bg-blue-950/30 border border-blue-300' : 'bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800'}">
-          <span class="text-[10px] text-blue-700 dark:text-blue-400 uppercase font-bold">Stage 3: Review</span>
-          <div class="text-lg font-black text-blue-600 dark:text-blue-400 mt-0.5">${awaitingFinalSignoff} Pending</div>
-          <span class="text-[10px] text-blue-600 dark:text-blue-300 block mt-0.5">Arshad &amp; Founder</span>
-        </div>
-        <div class="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-300">
-          <span class="text-[10px] text-[#026047] dark:text-emerald-400 uppercase font-bold">Stage 4: Delivered</span>
-          <div class="text-lg font-black text-[#026047] dark:text-emerald-300 mt-0.5">${approvedCount} Signed Off</div>
-          <span class="text-[10px] text-emerald-700 dark:text-emerald-400 block mt-0.5">Founder Approved</span>
-        </div>
-      </div>
-
-      <!-- Leads Cards List -->
-      <div class="space-y-4">
-        ${leads.length === 0 ? `
-          <div class="p-10 text-center bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
-            <span class="text-3xl block mb-2">🎯</span>
-            <div class="font-bold text-sm text-slate-700 dark:text-slate-300">No Client Leads in Pipeline</div>
-            <p class="text-xs text-slate-400 mt-1">Aryan Bhore scouts new leads and submits them directly to Founder Pranav for technical allocation.</p>
-            <button onclick="openNewLeadModal()" class="mt-3 px-3 py-1.5 rounded-lg bg-[#026047] text-[#fffde8] text-xs font-bold shadow-sm">
-              + Submit First Lead
-            </button>
-          </div>
-        ` : leads.map((lead) => renderSingleLeadCard(lead, currentRole)).join('')}
-      </div>
-    </div>
-  `;
+  return '';
 }
 window.renderLeadPipelineSection = renderLeadPipelineSection;
 
