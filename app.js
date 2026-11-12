@@ -435,6 +435,151 @@ function saveLeadsToStorage() {
   }
 }
 
+// ==============================================================================
+// REAL-TIME WORKFLOW NOTIFICATIONS (BELL DROPDOWN & REAL-TIME ALERTS)
+// ==============================================================================
+function loadNotificationsFromStorage() {
+  try {
+    const raw = localStorage.getItem('phoenix_notifications');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {
+    console.warn('Notifications load error:', e);
+  }
+  return [];
+}
+
+function saveNotificationsToStorage() {
+  try {
+    localStorage.setItem('phoenix_notifications', JSON.stringify((STATE.notifications || []).slice(0, 60)));
+  } catch (e) {
+    console.warn('Notifications save error:', e);
+  }
+}
+
+function createNotification({ type, title, message, targetRole = 'all', leadId = null, actor = '' }) {
+  const newNotif = {
+    id: 'notif-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+    type,
+    title,
+    message,
+    targetRole, // 'all', 'pranav', 'vivek', 'arshad', 'aryan'
+    leadId,
+    actor,
+    timestamp: new Date().toISOString(),
+    readBy: []
+  };
+
+  if (!Array.isArray(STATE.notifications)) STATE.notifications = [];
+  STATE.notifications.unshift(newNotif);
+  if (STATE.notifications.length > 60) STATE.notifications.length = 60;
+  saveNotificationsToStorage();
+
+  const active = STATE.activeRole;
+  const isRelevant = targetRole === 'all' || targetRole === active;
+  if (isRelevant) {
+    showToast(`${title}: ${message}`);
+  }
+
+  recordAuditLog(
+    'WORKFLOW_NOTIFICATION',
+    `[${targetRole.toUpperCase()}] ${title}: ${message}`,
+    actor || 'Workflow System'
+  );
+
+  renderNotificationBell();
+}
+window.createNotification = createNotification;
+
+function renderNotificationBell() {
+  const badge = document.getElementById('notification-badge');
+  const list = document.getElementById('notification-list');
+  const activeRole = STATE.activeRole;
+
+  const relevant = (STATE.notifications || []).filter(
+    (n) => n.targetRole === 'all' || n.targetRole === activeRole
+  );
+
+  const unreadCount = relevant.filter(
+    (n) => !(n.readBy || []).includes(activeRole)
+  ).length;
+
+  if (badge) {
+    if (unreadCount > 0) {
+      badge.textContent = unreadCount > 9 ? '9+' : unreadCount;
+      badge.classList.remove('hidden');
+    } else {
+      badge.classList.add('hidden');
+    }
+  }
+
+  if (list) {
+    if (relevant.length === 0) {
+      list.innerHTML = `
+        <div class="py-8 text-center text-slate-400">
+          <div class="text-2xl mb-1">🔔</div>
+          <div class="text-xs font-bold text-slate-600 dark:text-slate-300">No Notifications Yet</div>
+          <p class="text-[10px] text-slate-400 mt-0.5">Workflow updates across Aryan, Vivek, Arshad &amp; Founder will appear here.</p>
+        </div>
+      `;
+    } else {
+      list.innerHTML = relevant
+        .map((n) => {
+          const isRead = (n.readBy || []).includes(activeRole);
+          return `
+            <div class="p-3 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition ${isRead ? 'opacity-70' : 'bg-emerald-50/50 dark:bg-emerald-950/30 font-medium'}">
+              <div class="flex items-center justify-between gap-1 text-[11px] mb-0.5">
+                <span class="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                  ${!isRead ? '<span class="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block"></span>' : ''}
+                  ${escapeHtml(n.title)}
+                </span>
+                <span class="text-[9px] text-slate-400 font-mono">${formatDate(n.timestamp)}</span>
+              </div>
+              <p class="text-[11px] text-slate-600 dark:text-slate-300 leading-snug">${escapeHtml(n.message)}</p>
+              ${n.actor ? `<div class="text-[9px] text-[#026047] dark:text-emerald-400 font-bold mt-1">Action by: ${escapeHtml(n.actor)}</div>` : ''}
+            </div>
+          `;
+        })
+        .join('');
+    }
+  }
+}
+window.renderNotificationBell = renderNotificationBell;
+
+function toggleNotificationDropdown() {
+  const dd = document.getElementById('notification-dropdown');
+  if (!dd) return;
+  const isHidden = dd.classList.contains('hidden');
+  if (isHidden) {
+    dd.classList.remove('hidden');
+    renderNotificationBell();
+  } else {
+    dd.classList.add('hidden');
+  }
+}
+window.toggleNotificationDropdown = toggleNotificationDropdown;
+
+function markAllNotificationsAsRead() {
+  const activeRole = STATE.activeRole;
+  (STATE.notifications || []).forEach((n) => {
+    if (!n.readBy) n.readBy = [];
+    if (!n.readBy.includes(activeRole)) n.readBy.push(activeRole);
+  });
+  saveNotificationsToStorage();
+  renderNotificationBell();
+}
+window.markAllNotificationsAsRead = markAllNotificationsAsRead;
+
+document.addEventListener('click', (e) => {
+  const wrapper = document.getElementById('topbar-notifications-wrapper');
+  const dd = document.getElementById('notification-dropdown');
+  if (wrapper && dd && !wrapper.contains(e.target)) {
+    dd.classList.add('hidden');
+  }
+});
+
 function loadLeadsFromStorage() {
   try {
     const raw = localStorage.getItem('phoenix_leads_pipeline');
@@ -638,6 +783,7 @@ const STATE = {
   // Step 3: Vivek completes tech -> sends to Arshad (Notifies Founder Pranav)
   // Step 4: Founder Pranav finalizes & approves for delivery
   leads: loadLeadsFromStorage(),
+  notifications: loadNotificationsFromStorage(),
 
   // 2. Initial Projects (Strictly LeadX & Smart Review Management)
   projects: [
@@ -879,6 +1025,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupTheme();
   setupDateFilter();
   updateProjectSelectOptions();
+  renderNotificationBell();
 
   // Ensure Login Portal screen is presented first on page load
   const urlParams = new URLSearchParams(window.location.search);
@@ -931,8 +1078,13 @@ function renderSidebarNav(activeTab) {
   const pendingExpensesCount = (STATE.expenses || []).filter((e) => e.status === 'pending_approval').length;
   const pendingPayoutsCount = (STATE.team || []).filter((m) => (m.pendingCompensation || 0) > 0).length;
   const pendingTasksCount = (STATE.assignedTasks || []).filter((t) => t.status === 'review_pending').length;
-  const pendingLeadsCount = (STATE.leads || []).filter((l) => l.status === 'submitted_to_founder').length;
+  const pendingLeadsCount = (STATE.leads || []).filter((l) => l.status === 'submitted_to_founder' || l.status === 'awaiting_founder_market_approval').length;
   const totalPendingApprovals = pendingInflowsCount + pendingExpensesCount + pendingPayoutsCount + pendingTasksCount + pendingLeadsCount;
+
+  // Real-time notification bell sync
+  if (typeof renderNotificationBell === 'function') {
+    renderNotificationBell();
+  }
 
   const currentMemberId = currentRole === 'arshad' ? 'mem-02' : (currentRole === 'aryan' ? 'mem-04' : 'mem-03');
   const myAssignedTasksCount = (STATE.assignedTasks || []).filter((t) => t.assignedTo === currentMemberId && t.status !== 'completed').length;
@@ -2878,9 +3030,24 @@ function renderApprovals() {
     }
   });
 
-  // 5. Pending Client Leads (submitted by Aryan / Research Lead for Founder Allocation)
+  // 5. Client Deals Awaiting Market Approval & Publication Clearance
   (STATE.leads || []).forEach((lead) => {
-    if (lead.status === 'submitted_to_founder') {
+    if (lead.status === 'awaiting_founder_market_approval' || lead.status === 'sent_to_arshad_notified_founder') {
+      pendingItems.push({
+        type: 'MARKET_PUBLISH',
+        rawType: 'lead_market',
+        id: lead.id,
+        title: lead.clientName,
+        purpose: `Market Publication Clearance • ${lead.productType || 'LeadX'} (Price: ${formatINR(lead.dealValue)})`,
+        submittedBy: 'Arshad Shaikh (Commercial Packaging)',
+        project: lead.productType || 'LeadX Platform',
+        amount: Number(lead.dealValue) || 0,
+        scopeDisplay: formatINR(lead.dealValue),
+        date: lead.commercialCompletedAt ? lead.commercialCompletedAt.split('T')[0] : (lead.submittedAt ? lead.submittedAt.split('T')[0] : ''),
+        statusLabel: 'Awaiting Market Sign-off',
+        badgeClass: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300',
+      });
+    } else if (lead.status === 'submitted_to_founder') {
       pendingItems.push({
         type: 'LEAD',
         rawType: 'lead',
@@ -2893,7 +3060,7 @@ function renderApprovals() {
         scopeDisplay: formatINR(lead.dealValue),
         date: lead.submittedAt ? lead.submittedAt.split('T')[0] : (lead.date || ''),
         statusLabel: 'Awaiting Allocation',
-        badgeClass: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300',
+        badgeClass: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300',
       });
     }
   });
@@ -2992,13 +3159,13 @@ function renderApprovals() {
         </td>
         <td class="py-3 px-3 text-right whitespace-nowrap">
           <div class="inline-flex items-center gap-1.5">
-            <button onclick="${item.rawType === 'lead' ? `openAllocateLeadModal('${itemId}')` : `approveApprovalItem('${rType}', '${itemId}')`}"
+            <button onclick="${item.rawType === 'lead_market' ? `openDeliveryApprovalModal('${itemId}')` : (item.rawType === 'lead' ? `openAllocateLeadModal('${itemId}')` : `approveApprovalItem('${rType}', '${itemId}')`)}"
               class="px-2.5 py-1 rounded-lg bg-[#026047] hover:bg-[#024d39] text-[#fffde8] font-bold text-[11px] transition inline-flex items-center gap-1 shadow-sm">
-              <span>👑</span> ${item.rawType === 'lead' ? 'Allocate to Tech' : 'Approve'}
+              <span>👑</span> ${item.rawType === 'lead_market' ? 'Publish in Market' : (item.rawType === 'lead' ? 'Allocate to Tech' : 'Approve')}
             </button>
             <button onclick="rejectApprovalItem('${rType}', '${itemId}')"
               class="px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 font-bold text-[11px] transition inline-flex items-center"
-              title="${item.rawType === 'task' ? 'Return to In Progress' : (item.rawType === 'lead' ? 'Reject Lead' : 'Reject Request')}">
+              title="${item.rawType === 'task' ? 'Return to In Progress' : (item.rawType === 'lead' || item.rawType === 'lead_market' ? 'Reject Lead' : 'Reject Request')}">
               ${item.rawType === 'task' ? '↺ Return' : '✕ Reject'}
             </button>
           </div>
@@ -3029,6 +3196,11 @@ function completeTaskRecord(task) {
 
 function approveApprovalItem(type, id) {
   if (!requireFounder('sign off approvals')) return;
+
+  if (type === 'lead_market') {
+    openDeliveryApprovalModal(id);
+    return;
+  }
 
   if (type === 'lead') {
     openAllocateLeadModal(id);
@@ -3772,7 +3944,37 @@ function renderAllocatedWork() {
           priorityClass = 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300';
 
         let actionControl = '';
-        if (task.status === 'assigned') {
+        if (task.leadId) {
+          const linkedLead = (STATE.leads || []).find((l) => l.id === task.leadId);
+          if (task.status === 'assigned' || (linkedLead && linkedLead.status === 'allocated_to_vivek')) {
+            actionControl = `
+              <button onclick="startVivekTechWork('${safeId(task.leadId)}')"
+                class="px-3.5 py-1.5 rounded-lg bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs transition flex items-center gap-1.5 shadow-sm">
+                <span>🚀</span> Start Tech Work
+              </button>
+            `;
+          } else if (task.status === 'in_progress' || (linkedLead && linkedLead.status === 'tech_in_progress')) {
+            actionControl = `
+              <button onclick="openTechForwardModal('${safeId(task.leadId)}')"
+                class="px-3.5 py-1.5 rounded-lg bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs transition flex items-center gap-1.5 shadow-sm">
+                <span>📤</span> Complete &amp; Forward to Arshad
+              </button>
+            `;
+          } else if (task.status === 'review_pending' || (linkedLead && (linkedLead.status === 'forwarded_to_arshad' || linkedLead.status === 'awaiting_founder_market_approval'))) {
+            actionControl = `
+              <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 font-bold text-xs">
+                <span class="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
+                <span>⏳ Forwarded to Arshad &bull; Commercial Review</span>
+              </div>
+            `;
+          } else if (task.status === 'completed' || (linkedLead && (linkedLead.status === 'published_to_market' || linkedLead.status === 'approved_for_delivery'))) {
+            actionControl = `
+              <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 font-bold text-xs">
+                <span>🏆</span> Published in Market for Sale
+              </div>
+            `;
+          }
+        } else if (task.status === 'assigned') {
           actionControl = `
             <button onclick="updateTaskStatus('${tId}', 'in_progress')"
               class="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition flex items-center gap-1.5 shadow-sm">
@@ -3916,29 +4118,93 @@ function renderSingleLeadCard(rawLead, currentRole) {
   const isArshad = currentRole === 'arshad';
 
   const s1Done = true;
-  const s2Done =
-    lead.status === 'allocated_to_vivek' ||
-    lead.status === 'sent_to_arshad_notified_founder' ||
-    lead.status === 'approved_for_delivery';
-  const s3Done =
-    lead.status === 'sent_to_arshad_notified_founder' ||
-    lead.status === 'approved_for_delivery';
-  const s4Done = lead.status === 'approved_for_delivery';
+  const s2Done = [
+    'forwarded_to_arshad',
+    'commercial_in_progress',
+    'awaiting_founder_market_approval',
+    'published_to_market',
+    'approved_for_delivery',
+    'sent_to_arshad_notified_founder'
+  ].includes(lead.status);
+  const s2Active = lead.status === 'allocated_to_vivek' || lead.status === 'tech_in_progress';
 
-  let currentStageText = 'Stage 1: Awaiting Founder Allocation';
+  const s3Done = [
+    'awaiting_founder_market_approval',
+    'published_to_market',
+    'approved_for_delivery'
+  ].includes(lead.status);
+  const s3Active = lead.status === 'forwarded_to_arshad' || lead.status === 'commercial_in_progress' || lead.status === 'sent_to_arshad_notified_founder';
+
+  const s4Done = lead.status === 'published_to_market' || lead.status === 'approved_for_delivery';
+  const s4Active = lead.status === 'awaiting_founder_market_approval';
+
+  let currentStageText = 'Stage 1: Lead Scouted by Aryan';
   let badgeColor = 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-300';
   if (lead.status === 'allocated_to_vivek') {
-    currentStageText = 'Stage 2: Technical Development (Vivek)';
+    currentStageText = 'Stage 2: Directly Routed to Vivek (Tech)';
     badgeColor = 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border-purple-300';
-  } else if (lead.status === 'sent_to_arshad_notified_founder') {
-    currentStageText = 'Stage 3: Forwarded to Arshad • Founder Notified';
+  } else if (lead.status === 'tech_in_progress') {
+    currentStageText = 'Stage 2: Vivek Tech In Progress';
+    badgeColor = 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border-purple-300 animate-pulse';
+  } else if (lead.status === 'forwarded_to_arshad' || lead.status === 'sent_to_arshad_notified_founder') {
+    currentStageText = 'Stage 3: Forwarded to Arshad (Commercial)';
     badgeColor = 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border-blue-300';
-  } else if (lead.status === 'approved_for_delivery') {
-    currentStageText = 'Stage 4: Approved for Delivery';
+  } else if (lead.status === 'commercial_in_progress') {
+    currentStageText = 'Stage 3: Arshad Packaging In Progress';
+    badgeColor = 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border-blue-300 animate-pulse';
+  } else if (lead.status === 'awaiting_founder_market_approval') {
+    currentStageText = 'Stage 4: Awaiting Founder Market Clearance';
+    badgeColor = 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-300 animate-pulse';
+  } else if (lead.status === 'published_to_market' || lead.status === 'approved_for_delivery') {
+    currentStageText = 'Stage 4: Approved & Published in Market';
     badgeColor = 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300';
   }
 
   const safeDeliverable = lead.deliverableUrl ? sanitizeUrl(lead.deliverableUrl) : '';
+
+  let actionButtons = '';
+  if (lead.status === 'allocated_to_vivek' && (isVivek || isPranav)) {
+    actionButtons = `
+      <button onclick="startVivekTechWork('${lid}')"
+        class="px-3.5 py-1.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs transition shadow-sm flex items-center gap-1.5 cursor-pointer">
+        <span>🚀</span> Start Tech Work
+      </button>
+    `;
+  } else if (lead.status === 'tech_in_progress' && (isVivek || isPranav)) {
+    actionButtons = `
+      <button onclick="openTechForwardModal('${lid}')"
+        class="px-3.5 py-1.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs transition shadow-sm flex items-center gap-1.5 cursor-pointer">
+        <span>📤</span> Complete &amp; Forward to Arshad
+      </button>
+    `;
+  } else if ((lead.status === 'forwarded_to_arshad' || (lead.status === 'sent_to_arshad_notified_founder' && !lead.arshadChecked)) && (isArshad || isPranav)) {
+    actionButtons = `
+      <button onclick="startArshadCommercialWork('${lid}')"
+        class="px-3.5 py-1.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs transition shadow-sm flex items-center gap-1.5 cursor-pointer">
+        <span>🤝</span> Start Commercial Packaging
+      </button>
+    `;
+  } else if (lead.status === 'commercial_in_progress' && (isArshad || isPranav)) {
+    actionButtons = `
+      <button onclick="openArshadSubmitModal('${lid}')"
+        class="px-3.5 py-1.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs transition shadow-sm flex items-center gap-1.5 cursor-pointer">
+        <span>👑</span> Complete &amp; Submit for Founder Market Clearance
+      </button>
+    `;
+  } else if ((lead.status === 'awaiting_founder_market_approval' || lead.status === 'sent_to_arshad_notified_founder') && isPranav) {
+    actionButtons = `
+      <button onclick="openDeliveryApprovalModal('${lid}')"
+        class="px-3.5 py-1.5 rounded-xl bg-[#026047] hover:bg-[#024d39] text-[#fffde8] font-black text-xs transition shadow-sm flex items-center gap-1.5 cursor-pointer">
+        <span>👑</span> Verify &amp; Publish in Market
+      </button>
+    `;
+  } else if (lead.status === 'published_to_market' || lead.status === 'approved_for_delivery') {
+    actionButtons = `
+      <span class="px-3 py-1.5 rounded-xl bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-bold text-xs flex items-center gap-1.5">
+        <span>🏆</span> Published in Market for Sale
+      </span>
+    `;
+  }
 
   return `
     <div class="p-5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-4 hover:border-[#026047]/40 transition">
@@ -3965,38 +4231,42 @@ function renderSingleLeadCard(rawLead, currentRole) {
       <!-- 4-Step Interactive Progress Stepper Bar -->
       <div class="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
         <div class="grid grid-cols-1 sm:grid-cols-4 gap-2 text-[11px]">
+          <!-- Step 1: Aryan Scouted -->
           <div class="flex items-center gap-2 p-2 rounded-lg ${s1Done ? 'bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800' : 'bg-slate-100 opacity-60'}">
             <span class="w-5 h-5 rounded-full flex items-center justify-center font-bold text-xs ${s1Done ? 'bg-[#026047] text-white' : 'bg-slate-300 text-slate-600'}">✓</span>
             <div>
               <div class="font-bold text-slate-900 dark:text-white">1. Aryan Scouted</div>
-              <div class="text-[10px] text-slate-500">Lead Entered</div>
+              <div class="text-[10px] text-slate-500">Lead Created</div>
             </div>
           </div>
-          <div class="flex items-center gap-2 p-2 rounded-lg ${s2Done ? 'bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800' : (lead.status === 'submitted_to_founder' ? 'bg-amber-50 dark:bg-amber-950/40 border border-amber-300 animate-pulse' : 'bg-slate-100 opacity-60')}">
-            <span class="w-5 h-5 rounded-full flex items-center justify-center font-bold text-xs ${s2Done ? 'bg-[#026047] text-white' : 'bg-amber-500 text-white'}">
+          <!-- Step 2: Vivek Tech -->
+          <div class="flex items-center gap-2 p-2 rounded-lg ${s2Done ? 'bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800' : (s2Active ? 'bg-purple-50 dark:bg-purple-950/40 border border-purple-300 animate-pulse' : 'bg-slate-100 opacity-60')}">
+            <span class="w-5 h-5 rounded-full flex items-center justify-center font-bold text-xs ${s2Done ? 'bg-[#026047] text-white' : (s2Active ? 'bg-purple-600 text-white' : 'bg-slate-300 text-slate-600')}">
               ${s2Done ? '✓' : '2'}
             </span>
             <div>
-              <div class="font-bold text-slate-900 dark:text-white">2. Pranav Allocates</div>
-              <div class="text-[10px] text-slate-500">${s2Done ? 'Assigned to Vivek' : 'Awaiting Pranav'}</div>
+              <div class="font-bold text-slate-900 dark:text-white">2. Vivek Engineering</div>
+              <div class="text-[10px] text-slate-500">${s2Done ? 'Tech Completed' : (lead.status === 'tech_in_progress' ? 'Dev In Progress' : 'Directly Assigned')}</div>
             </div>
           </div>
-          <div class="flex items-center gap-2 p-2 rounded-lg ${s3Done ? 'bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800' : (lead.status === 'allocated_to_vivek' ? 'bg-purple-50 dark:bg-purple-950/40 border border-purple-300 animate-pulse' : 'bg-slate-100 opacity-60')}">
-            <span class="w-5 h-5 rounded-full flex items-center justify-center font-bold text-xs ${s3Done ? 'bg-[#026047] text-white' : 'bg-purple-500 text-white'}">
+          <!-- Step 3: Arshad Commercial -->
+          <div class="flex items-center gap-2 p-2 rounded-lg ${s3Done ? 'bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800' : (s3Active ? 'bg-blue-50 dark:bg-blue-950/40 border border-blue-300 animate-pulse' : 'bg-slate-100 opacity-60')}">
+            <span class="w-5 h-5 rounded-full flex items-center justify-center font-bold text-xs ${s3Done ? 'bg-[#026047] text-white' : (s3Active ? 'bg-blue-600 text-white' : 'bg-slate-300 text-slate-600')}">
               ${s3Done ? '✓' : '3'}
             </span>
             <div>
-              <div class="font-bold text-slate-900 dark:text-white">3. Vivek Tech Complete</div>
-              <div class="text-[10px] text-slate-500">${s3Done ? 'Sent to Arshad' : 'In Dev by Vivek'}</div>
+              <div class="font-bold text-slate-900 dark:text-white">3. Arshad Commercial</div>
+              <div class="text-[10px] text-slate-500">${s3Done ? 'Packaging Done' : (lead.status === 'commercial_in_progress' ? 'Packaging In Progress' : 'Pending Review')}</div>
             </div>
           </div>
-          <div class="flex items-center gap-2 p-2 rounded-lg ${s4Done ? 'bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800' : (lead.status === 'sent_to_arshad_notified_founder' ? 'bg-blue-50 dark:bg-blue-950/40 border border-blue-300 animate-pulse' : 'bg-slate-100 opacity-60')}">
-            <span class="w-5 h-5 rounded-full flex items-center justify-center font-bold text-xs ${s4Done ? 'bg-[#026047] text-white' : 'bg-blue-500 text-white'}">
+          <!-- Step 4: Founder Market Clearance -->
+          <div class="flex items-center gap-2 p-2 rounded-lg ${s4Done ? 'bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800' : (s4Active ? 'bg-amber-50 dark:bg-amber-950/40 border border-amber-300 animate-pulse' : 'bg-slate-100 opacity-60')}">
+            <span class="w-5 h-5 rounded-full flex items-center justify-center font-bold text-xs ${s4Done ? 'bg-[#026047] text-white' : (s4Active ? 'bg-amber-500 text-white' : 'bg-slate-300 text-slate-600')}">
               ${s4Done ? '✓' : '4'}
             </span>
             <div>
-              <div class="font-bold text-slate-900 dark:text-white">4. Delivery Sign-off</div>
-              <div class="text-[10px] text-slate-500">${s4Done ? 'Founder Approved' : 'Final Review'}</div>
+              <div class="font-bold text-slate-900 dark:text-white">4. Market Clearance</div>
+              <div class="text-[10px] text-slate-500">${s4Done ? 'Published in Market' : (s4Active ? 'Ready for Clearance' : 'Pending Verification')}</div>
             </div>
           </div>
         </div>
@@ -4015,25 +4285,18 @@ function renderSingleLeadCard(rawLead, currentRole) {
           </div>
           <div class="flex justify-between text-slate-500">
             <span>Lead Scouted By:</span>
-            <strong class="text-emerald-700 dark:text-emerald-400">${escapeHtml(lead.submittedBy || 'Aryan Bhore')}</strong>
+            <strong class="text-emerald-700 dark:text-emerald-400">${escapeHtml(lead.submittedBy || 'Aryan Bhore')} (Research Lead)</strong>
           </div>
           <p class="text-[11px] text-slate-600 dark:text-slate-400 pt-1 border-t border-slate-100 dark:border-slate-800">
-            <strong>Scope / Pain points:</strong> ${escapeHtml(lead.requirements)}
+            <strong>Scope / Client Pain Points:</strong> ${escapeHtml(lead.requirements)}
           </p>
         </div>
 
         <div class="p-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1.5">
-          ${lead.founderInstructions ? `
-            <div class="text-[11px]">
-              <span class="font-bold text-amber-700 dark:text-amber-400">👑 Founder's Technical Scope (For Vivek):</span>
-              <p class="text-slate-700 dark:text-slate-300 mt-0.5">${escapeHtml(lead.founderInstructions)}</p>
-              <div class="text-[10px] text-slate-400 mt-1">Due Date: <strong>${escapeHtml(lead.dueDate || '—')}</strong> • Priority: <strong>${escapeHtml(lead.priority || 'high')}</strong></div>
-            </div>
-          ` : `
-            <div class="text-slate-400 text-xs italic py-2">
-              Awaiting Founder Pranav Bansode to review and assign technical development instructions to Vivek.
-            </div>
-          `}
+          <div class="text-[11px] text-blue-700 dark:text-blue-400 font-bold flex items-center justify-between">
+            <span>💻 Assigned To: Vivek Gajdhane (Tech Dept)</span>
+            <span class="text-[10px] font-mono text-slate-400">Target: ${escapeHtml(lead.dueDate || '1 Week')}</span>
+          </div>
 
           ${lead.deliverableUrl ? `
             <div class="pt-2 border-t border-slate-100 dark:border-slate-800 text-[11px]">
@@ -4044,20 +4307,22 @@ function renderSingleLeadCard(rawLead, currentRole) {
                   : `<span class="text-rose-600 font-mono">[Blocked unsafe URL] ${escapeHtml(lead.deliverableUrl)}</span>`
                 }
               </div>
-              <p class="text-slate-600 dark:text-slate-400 text-[10px] mt-0.5">${escapeHtml(lead.techNotes || '')}</p>
-              <div class="text-[10px] text-emerald-600 font-bold mt-1">✓ Sent to Arshad Shaikh • Founder Pranav Notified</div>
+              <p class="text-slate-600 dark:text-slate-400 text-[10px] mt-0.5"><strong>Tech Note:</strong> ${escapeHtml(lead.techNotes || '')}</p>
+              <div class="text-[10px] text-emerald-600 font-bold mt-1">✓ Forwarded to Arshad Shaikh • Rest of Team Notified</div>
             </div>
           ` : ''}
 
-          ${lead.arshadChecked ? `
-            <div class="text-[10px] text-blue-700 dark:text-blue-400 font-bold">
-              ✓ Arshad Shaikh verified client packaging &amp; pricing alignment.
+          ${lead.commercialNotes ? `
+            <div class="pt-2 border-t border-slate-100 dark:border-slate-800 text-[11px]">
+              <span class="font-bold text-blue-700 dark:text-blue-300">🤝 Arshad's Commercial Packaging &amp; Terms:</span>
+              <p class="text-slate-600 dark:text-slate-400 text-[10px] mt-0.5">${escapeHtml(lead.commercialNotes)}</p>
+              <div class="text-[10px] text-blue-600 font-bold mt-1">✓ Verified for Go-To-Market Release</div>
             </div>
           ` : ''}
 
           ${lead.approvedBy ? `
             <div class="p-2 rounded bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 text-[11px] font-bold text-[#026047] dark:text-emerald-300 flex items-center gap-1.5">
-              <span>👑</span> Approved for Final Client Delivery by ${escapeHtml(lead.approvedBy)} on ${escapeHtml(formatDate(lead.approvedAt))}
+              <span>👑</span> Approved &amp; Published in Market by ${escapeHtml(lead.approvedBy)} on ${escapeHtml(formatDate(lead.approvedAt))}
             </div>
           ` : ''}
         </div>
@@ -4068,47 +4333,17 @@ function renderSingleLeadCard(rawLead, currentRole) {
         <div class="text-xs text-slate-500">
           Current Assigned Action:
           <strong class="text-slate-900 dark:text-white">
-            ${lead.status === 'submitted_to_founder' ? 'Founder Pranav allocates technical work to Vivek' : ''}
-            ${lead.status === 'allocated_to_vivek' ? 'Vivek Gajdhane completes technical build &amp; submits' : ''}
-            ${lead.status === 'sent_to_arshad_notified_founder' ? 'Arshad reviews &amp; Founder Pranav gives final sign-off' : ''}
-            ${lead.status === 'approved_for_delivery' ? 'Project successfully delivered to client!' : ''}
+            ${lead.status === 'allocated_to_vivek' ? 'Vivek Gajdhane begins technical engineering' : ''}
+            ${lead.status === 'tech_in_progress' ? 'Vivek Gajdhane completes build & forwards to Arshad' : ''}
+            ${lead.status === 'forwarded_to_arshad' ? 'Arshad Shaikh reviews deal & prepares commercial packaging' : ''}
+            ${lead.status === 'commercial_in_progress' ? 'Arshad Shaikh finalizes packaging & submits to Founder Pranav' : ''}
+            ${lead.status === 'awaiting_founder_market_approval' ? 'Founder Pranav verifies pipeline & publishes in market' : ''}
+            ${lead.status === 'published_to_market' || lead.status === 'approved_for_delivery' ? 'Project published in market for sale!' : ''}
           </strong>
         </div>
 
         <div class="flex items-center gap-2 flex-wrap">
-          ${lead.status === 'submitted_to_founder' && isPranav ? `
-            <button onclick="openAllocateLeadModal('${lid}')"
-              class="px-3.5 py-1.5 rounded-xl bg-[#026047] text-[#fffde8] font-bold text-xs hover:bg-[#024d39] transition shadow-sm flex items-center gap-1 cursor-pointer">
-              <span>👑</span> Allocate to Vivek (Tech)
-            </button>
-          ` : ''}
-
-          ${lead.status === 'allocated_to_vivek' && (isVivek || isPranav) ? `
-            <button onclick="openTechForwardModal('${lid}')"
-              class="px-3.5 py-1.5 rounded-xl bg-purple-700 text-white font-bold text-xs hover:bg-purple-800 transition shadow-sm flex items-center gap-1 cursor-pointer">
-              <span>💻</span> Deliver Tech &amp; Forward to Arshad
-            </button>
-          ` : ''}
-
-          ${lead.status === 'sent_to_arshad_notified_founder' && (isArshad || isPranav) && !lead.arshadChecked ? `
-            <button onclick="confirmArshadCheck('${lid}')"
-              class="px-3 py-1.5 rounded-xl bg-blue-700 text-white font-bold text-xs hover:bg-blue-800 transition shadow-sm flex items-center gap-1 cursor-pointer">
-              <span>🤝</span> Verify Deal Alignment
-            </button>
-          ` : ''}
-
-          ${lead.status === 'sent_to_arshad_notified_founder' && isPranav ? `
-            <button onclick="openDeliveryApprovalModal('${lid}')"
-              class="px-3.5 py-1.5 rounded-xl bg-[#026047] text-[#fffde8] font-black text-xs hover:bg-[#024d39] transition shadow-sm flex items-center gap-1 cursor-pointer">
-              <span>👑</span> Approve for Delivery
-            </button>
-          ` : ''}
-
-          ${lead.status === 'approved_for_delivery' ? `
-            <span class="px-3 py-1.5 rounded-xl bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-bold text-xs flex items-center gap-1">
-              <span>✓</span> Delivery Complete &amp; Signed Off
-            </span>
-          ` : ''}
+          ${actionButtons}
         </div>
       </div>
     </div>
@@ -4219,6 +4454,7 @@ window.submitClientLead = function () {
   const newLeadId = 'lead-' + Date.now();
   const leadNum = 'LEAD-2026-' + String((STATE.leads || []).length + 1).padStart(3, '0');
 
+  // Lead directly goes to Vivek Gajdhane (Technical Dept)
   const newLead = normalizeLead({
     id: newLeadId,
     leadNumber: leadNum,
@@ -4229,25 +4465,102 @@ window.submitClientLead = function () {
     dealValue,
     requirements,
     submittedBy: submitter,
+    submittedByMemberId: getCurrentMemberId(),
     submittedAt: new Date().toISOString(),
-    status: 'submitted_to_founder',
+    status: 'allocated_to_vivek',
+    stage: 'allocated_to_vivek',
+    allocatedTo: 'mem-03',
+    allocatedToName: 'Vivek Gajdhane',
+    allocatedAt: new Date().toISOString(),
+    dueDate: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
   });
+
+  // Automatically create task directly in Vivek's queue
+  const newTask = {
+    id: 'task-lead-' + Date.now(),
+    title: `Develop ${newLead.productType} for ${newLead.clientName}`,
+    assignedTo: 'mem-03',
+    assignedToName: 'Vivek Gajdhane',
+    projectId: (newLead.productType || '').includes('Smart Review') ? 'prj-srm' : 'prj-leadx',
+    projectName: newLead.productType,
+    priority: 'high',
+    dueDate: newLead.dueDate,
+    assignedDate: new Date().toISOString().split('T')[0],
+    assignedBy: `${newLead.submittedBy} (Research Lead)`,
+    description: `[Lead ${newLead.leadNumber}]: ${requirements}`,
+    status: 'assigned',
+    leadId: newLead.id,
+  };
+
+  STATE.assignedTasks.unshift(newTask);
+  saveAssignedTasksToStorage();
+  syncAssignedTaskToSupabase(newTask);
 
   STATE.leads.unshift(newLead);
   saveLeadsToStorage();
   recordAuditLog(
-    'LEAD_SUBMITTED',
-    `${newLead.submittedBy} submitted new client lead "${clientName}" (${formatINR(dealValue)}) directly to Founder Pranav Bansode.`,
+    'LEAD_CREATED_VIVEK_ALLOCATED',
+    `${newLead.submittedBy} created lead "${clientName}" (${formatINR(dealValue)}) — routed directly to Vivek Gajdhane for technical development.`,
     newLead.submittedBy
   );
   saveAppStateToStorage();
   syncLeadToSupabase(newLead);
 
+  // Notify rest of users on portal
+  createNotification({
+    type: 'LEAD_CREATED_VIVEK_ASSIGNED',
+    title: '🎯 New Lead Directly to Vivek',
+    message: `${newLead.submittedBy} created lead "${clientName}" (${formatINR(dealValue)}) for ${newLead.productType}. Directly routed to Vivek for technical development.`,
+    targetRole: 'all',
+    leadId: newLead.id,
+    actor: newLead.submittedBy
+  });
+
   closeNewLeadModal();
   const form = document.querySelector('#modal-new-lead form');
   if (form) form.reset();
 
-  showToast(`🎯 Lead "${clientName}" submitted! Routed directly to Founder Pranav Bansode for allocation.`);
+  showToast(`🎯 Lead "${clientName}" created! Routed directly to Vivek Gajdhane & team notified.`);
+  renderCurrentTab();
+  renderSidebarNav(STATE.currentTab);
+};
+
+window.startVivekTechWork = function (leadId) {
+  if (!requireAuth('start technical development')) return;
+  const lead = (STATE.leads || []).find((l) => l.id === leadId);
+  if (!lead) return;
+
+  lead.status = 'tech_in_progress';
+  lead.stage = 'tech_in_progress';
+  lead.techStartedAt = new Date().toISOString();
+
+  const linkedTask = (STATE.assignedTasks || []).find((t) => t.leadId === lead.id);
+  if (linkedTask) {
+    linkedTask.status = 'in_progress';
+    saveAssignedTasksToStorage();
+    syncAssignedTaskToSupabase(linkedTask);
+  }
+
+  saveLeadsToStorage();
+  recordAuditLog(
+    'TECH_WORK_STARTED',
+    `Vivek Gajdhane started technical engineering for "${lead.clientName}". Founder Pranav notified.`,
+    'Vivek Gajdhane (Technical Dept)'
+  );
+  saveAppStateToStorage();
+  syncLeadToSupabase(lead);
+
+  // Strictly ONLY notify Founder ("whenever vivek starts its work it will only notify founder")
+  createNotification({
+    type: 'TECH_STARTED',
+    title: '💻 Vivek Started Tech Work',
+    message: `Vivek Gajdhane has started technical engineering for "${lead.clientName}" (${lead.productType}).`,
+    targetRole: 'pranav',
+    leadId: lead.id,
+    actor: 'Vivek Gajdhane'
+  });
+
+  showToast(`🚀 Tech work started for "${lead.clientName}"! Founder Pranav notified.`);
   renderCurrentTab();
   renderSidebarNav(STATE.currentTab);
 };
@@ -4400,8 +4713,8 @@ window.confirmTechForward = function () {
   const lead = (STATE.leads || []).find((l) => l.id === leadId);
   if (!lead) return;
 
-  lead.status = 'sent_to_arshad_notified_founder';
-  lead.stage = 'sent_to_arshad_notified_founder';
+  lead.status = 'forwarded_to_arshad';
+  lead.stage = 'forwarded_to_arshad';
   lead.deliverableUrl = safeUrl;
   lead.techNotes = techNotes;
   lead.techCompletedAt = new Date().toISOString();
@@ -4411,30 +4724,128 @@ window.confirmTechForward = function () {
   if (linkedTask) {
     linkedTask.status = 'review_pending';
     saveAssignedTasksToStorage();
-    const sb = getSupabaseClient();
-    if (sb && linkedTask.id && linkedTask.id.includes('-') && !linkedTask.id.startsWith('task-')) {
-      sb.from('assigned_tasks')
-        .update({ status: 'review_pending' })
-        .eq('id', linkedTask.id)
-        .then(({ error }) => {
-          if (error) console.warn('Supabase task forward sync note:', error.message);
-        });
-    }
+    syncAssignedTaskToSupabase(linkedTask);
   }
 
   saveLeadsToStorage();
   recordAuditLog(
     'TECH_DELIVERED_FORWARDED',
-    `Vivek completed technical development for "${lead.clientName}". Forwarded to Arshad Shaikh; Founder Pranav notified.`,
+    `Vivek completed technical development for "${lead.clientName}". Forwarded to Arshad Shaikh; all portal users notified.`,
     MEMBER_NAME_MAP[getCurrentMemberId()] || 'Vivek Gajdhane (Technical Dept)'
   );
   saveAppStateToStorage();
   syncLeadToSupabase(lead);
 
+  // "as he finishesh with that he will forward the work to arshad with an descriptive note and will notify every each user on portal."
+  createNotification({
+    type: 'TECH_FORWARDED_TO_ARSHAD',
+    title: '📤 Tech Completed & Forwarded to Arshad',
+    message: `Vivek completed tech deliverables for "${lead.clientName}" and forwarded to Arshad Shaikh. Note: "${techNotes.slice(0, 80)}${techNotes.length > 80 ? '...' : ''}"`,
+    targetRole: 'all',
+    leadId: lead.id,
+    actor: 'Vivek Gajdhane'
+  });
+
   if (urlEl) urlEl.value = '';
   if (notesEl) notesEl.value = '';
   closeTechForwardModal();
-  showToast('📤 Technical deliverables submitted to Arshad Shaikh! Founder Pranav Bansode notified.');
+  showToast('📤 Technical deliverables forwarded to Arshad Shaikh! All portal users notified.');
+
+  renderCurrentTab();
+  renderSidebarNav(STATE.currentTab);
+};
+
+window.startArshadCommercialWork = function (leadId) {
+  if (!requireAuth('start commercial packaging')) return;
+  const lead = (STATE.leads || []).find((l) => l.id === leadId);
+  if (!lead) return;
+
+  lead.status = 'commercial_in_progress';
+  lead.stage = 'commercial_in_progress';
+  lead.commercialStartedAt = new Date().toISOString();
+
+  saveLeadsToStorage();
+  recordAuditLog(
+    'COMMERCIAL_WORK_STARTED',
+    `Arshad Shaikh started commercial packaging & deal alignment for "${lead.clientName}". Founder notified.`,
+    'Arshad Shaikh (Co-Founder)'
+  );
+  saveAppStateToStorage();
+  syncLeadToSupabase(lead);
+
+  // Strictly ONLY notify Founder ("if he starts to work it will notify me")
+  createNotification({
+    type: 'COMMERCIAL_STARTED',
+    title: '🤝 Arshad Started Commercial Work',
+    message: `Arshad Shaikh started commercial packaging, pricing terms & market alignment for "${lead.clientName}".`,
+    targetRole: 'pranav',
+    leadId: lead.id,
+    actor: 'Arshad Shaikh'
+  });
+
+  showToast(`🤝 Commercial packaging started for "${lead.clientName}"! Founder notified.`);
+  renderCurrentTab();
+  renderSidebarNav(STATE.currentTab);
+};
+
+window.openArshadSubmitModal = function (leadId) {
+  const lead = (STATE.leads || []).find((l) => l.id === leadId);
+  if (!lead) return;
+
+  const idEl = document.getElementById('arshad-submit-lead-id');
+  if (idEl) idEl.value = lead.id;
+
+  const displayEl = document.getElementById('arshad-submit-client-display');
+  if (displayEl) displayEl.textContent = `${lead.clientName} (${lead.productType} • ${formatINR(lead.dealValue)})`;
+
+  const notesEl = document.getElementById('arshad-commercial-notes');
+  if (notesEl) notesEl.value = lead.commercialNotes || '';
+
+  const modal = document.getElementById('modal-arshad-submit-founder');
+  if (modal) modal.classList.remove('hidden');
+};
+
+window.closeArshadSubmitModal = function () {
+  const modal = document.getElementById('modal-arshad-submit-founder');
+  if (modal) modal.classList.add('hidden');
+};
+
+window.confirmArshadSubmitToFounder = function () {
+  const leadId = document.getElementById('arshad-submit-lead-id')?.value;
+  const notesEl = document.getElementById('arshad-commercial-notes');
+  const commercialNotes = notesEl ? notesEl.value.trim() : '';
+
+  const lead = (STATE.leads || []).find((l) => l.id === leadId);
+  if (!lead) return;
+
+  lead.status = 'awaiting_founder_market_approval';
+  lead.stage = 'awaiting_founder_market_approval';
+  lead.commercialNotes = commercialNotes || 'Commercial packaging completed. Deal structured and aligned for market launch.';
+  lead.commercialCompletedAt = new Date().toISOString();
+  lead.arshadChecked = true;
+
+  saveLeadsToStorage();
+  recordAuditLog(
+    'COMMERCIAL_SUBMITTED_TO_FOUNDER',
+    `Arshad Shaikh completed commercial packaging for "${lead.clientName}" and submitted to Founder Pranav for market clearance.`,
+    'Arshad Shaikh (Co-Founder)'
+  );
+  saveAppStateToStorage();
+  syncLeadToSupabase(lead);
+
+  // "and after finishing it will notify each single user on portal. And it will directly goes to founder to verify and apporve this to publish in market to make a better sale."
+  createNotification({
+    type: 'SUBMITTED_TO_FOUNDER_MARKET',
+    title: '👑 Submitted for Founder Market Clearance',
+    message: `Arshad finished commercial packaging for "${lead.clientName}". Submitted directly to Founder Pranav for market clearance & publish approval!`,
+    targetRole: 'all',
+    leadId: lead.id,
+    actor: 'Arshad Shaikh'
+  });
+
+  if (notesEl) notesEl.value = '';
+  closeArshadSubmitModal();
+  showToast(`👑 "${lead.clientName}" submitted to Founder Pranav for Market Approval! All users notified.`);
 
   renderCurrentTab();
   renderSidebarNav(STATE.currentTab);
@@ -4464,7 +4875,7 @@ window.confirmArshadCheck = function (leadId) {
 };
 
 window.openDeliveryApprovalModal = function (leadId) {
-  if (!requireFounder('grant final delivery sign-off')) return;
+  if (!requireFounder('grant market clearance & publish sign-off')) return;
   const lead = (STATE.leads || []).find((l) => l.id === leadId);
   if (!lead) return;
 
@@ -4481,15 +4892,14 @@ window.openDeliveryApprovalModal = function (leadId) {
   const flowSummary = document.getElementById('delivery-lead-flow-summary');
   if (flowSummary) {
     flowSummary.innerHTML = `
-      <div class="space-y-1 text-slate-600 dark:text-slate-300">
-        <div>🎯 <strong>Lead Scouted:</strong> By ${escapeHtml(lead.submittedBy || 'Aryan Bhore')} (${escapeHtml(formatDate(lead.submittedAt))})</div>
-        <div>👑 <strong>Technical Allocation:</strong> Assigned to Vivek with scope: "${escapeHtml(lead.founderInstructions || 'Core deliverables')}"</div>
-        <div>💻 <strong>Vivek's Deliverables:</strong> ${
+      <div class="space-y-1.5 text-slate-600 dark:text-slate-300">
+        <div>🎯 <strong>1. Scouted by Aryan:</strong> ${escapeHtml(lead.submittedBy || 'Aryan Bhore')} (${escapeHtml(formatDate(lead.submittedAt))})</div>
+        <div>💻 <strong>2. Vivek's Deliverables:</strong> ${
           safeUrl
             ? `<a href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer" class="text-blue-600 underline font-mono">${escapeHtml(lead.deliverableUrl)}</a>`
             : `<span class="text-slate-500 font-mono">${escapeHtml(lead.deliverableUrl || 'Completed build')}</span>`
-        }</div>
-        <div>🤝 <strong>Arshad Alignment:</strong> ${lead.arshadChecked ? '✓ Checked &amp; Verified' : 'Standard packaging verified'}</div>
+        } <span class="text-xs text-slate-500">(${escapeHtml(lead.techNotes || 'Verified build')})</span></div>
+        <div>🤝 <strong>3. Arshad Commercial Packaging:</strong> ${escapeHtml(lead.commercialNotes || 'Commercial packaging completed')}</div>
       </div>
     `;
   }
@@ -4504,16 +4914,16 @@ window.closeDeliveryApprovalModal = function () {
 };
 
 window.confirmDeliveryApproval = function () {
-  if (!requireFounder('grant final delivery sign-off')) return;
+  if (!requireFounder('grant market clearance & publish approval')) return;
   const leadId = document.getElementById('delivery-lead-id')?.value;
   const lead = (STATE.leads || []).find((l) => l.id === leadId);
-  if (!lead || lead.status === 'approved_for_delivery') return;
+  if (!lead || lead.status === 'published_to_market') return;
 
   const founderNotesEl = document.getElementById('delivery-founder-notes');
   const founderNotes = founderNotesEl ? founderNotesEl.value.trim() : '';
 
-  lead.status = 'approved_for_delivery';
-  lead.stage = 'approved_for_delivery';
+  lead.status = 'published_to_market';
+  lead.stage = 'published_to_market';
   lead.approvedBy = 'Pranav Bansode (Founder & Director)';
   lead.approvedAt = new Date().toISOString();
   if (founderNotes) lead.deliveryNotes = founderNotes;
@@ -4543,7 +4953,7 @@ window.confirmDeliveryApproval = function () {
       approvedBy: 'Pranav Bansode (Founder / Director)',
       approvedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
       invoiceNumber: 'INV-2026-' + String((STATE.income || []).length + 101),
-      notes: founderNotes || `Project delivery finalized & approved for client ${lead.clientName}`,
+      notes: founderNotes || `Project published in market for client ${lead.clientName}`,
     };
     STATE.income.unshift(newInc);
     syncIncomeToSupabase(newInc);
@@ -4555,15 +4965,25 @@ window.confirmDeliveryApproval = function () {
   saveLeadsToStorage();
   recordAuditLog(
     'DELIVERY_APPROVED',
-    `Founder Pranav Bansode gave final delivery sign-off for client "${lead.clientName}" (${formatINR(lead.dealValue)}).`,
+    `Founder Pranav Bansode verified & approved "${lead.clientName}" (${formatINR(lead.dealValue)}) to publish in market for sales.`,
     'Pranav Bansode (Founder / Director)'
   );
   saveAppStateToStorage();
   syncLeadToSupabase(lead);
 
+  // "notify each single user on portal"
+  createNotification({
+    type: 'MARKET_PUBLISH_APPROVED',
+    title: '🎉 Deal Approved & Published in Market!',
+    message: `Founder Pranav Bansode verified and approved "${lead.clientName}" (${formatINR(lead.dealValue)}) for official market publication & sales launch!`,
+    targetRole: 'all',
+    leadId: lead.id,
+    actor: 'Pranav Bansode'
+  });
+
   if (founderNotesEl) founderNotesEl.value = '';
   closeDeliveryApprovalModal();
-  showToast(`👑 Final delivery approved for ${lead.clientName}! Revenue deal enrolled.`);
+  showToast(`👑 "${lead.clientName}" approved & published in market! Revenue deal enrolled.`);
 
   renderCurrentTab();
   renderSidebarNav(STATE.currentTab);

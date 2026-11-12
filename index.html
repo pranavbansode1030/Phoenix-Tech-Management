@@ -325,8 +325,8 @@
           </div>
         </div>
 
-        <!-- Authenticated Session Card -->
-        <div class="px-4 py-3 border-b border-[#024d39] bg-[#014d39]/40 space-y-2">
+        <!-- Authenticated Session Card (Hidden as requested) -->
+        <div id="sidebar-session-card" class="hidden px-4 py-3 border-b border-[#024d39] bg-[#014d39]/40 space-y-2">
           <div class="flex items-center gap-2.5">
             <div class="relative shrink-0">
               <div id="founder-avatar-text" class="w-9 h-9 rounded-xl bg-[#fffde8] text-[#026047] font-black text-xs flex items-center justify-center shadow-sm">
@@ -497,6 +497,35 @@
 
           <!-- Quick Actions (Role-Adaptive) -->
           <div id="topbar-actions-container" class="flex items-center gap-2">
+            <!-- Workflow Notification Bell Dropdown -->
+            <div class="relative" id="topbar-notifications-wrapper">
+              <button id="btn-notification-bell" onclick="toggleNotificationDropdown()"
+                title="Workflow Notifications"
+                class="relative p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all text-xs flex items-center justify-center cursor-pointer shadow-xs">
+                <svg class="w-4 h-4 text-slate-600 dark:text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                </svg>
+                <span id="notification-badge"
+                  class="hidden absolute -top-1 -right-1 min-w-[18px] h-[18px] rounded-full bg-rose-500 text-white text-[10px] font-black flex items-center justify-center px-1 shadow animate-pulse">0</span>
+              </button>
+              <!-- Notifications Dropdown Panel -->
+              <div id="notification-dropdown"
+                class="hidden absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl z-50 overflow-hidden text-xs">
+                <div class="p-3 bg-[#026047] text-[#fffde8] flex items-center justify-between">
+                  <div class="flex items-center gap-1.5 font-bold">
+                    <span>🔔</span> Workflow Notifications
+                  </div>
+                  <button onclick="markAllNotificationsAsRead()" class="text-[10px] text-[#fffde8]/80 hover:text-white underline cursor-pointer">
+                    Mark all read
+                  </button>
+                </div>
+                <div id="notification-list" class="max-h-80 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
+                  <!-- Rendered dynamically by app.js -->
+                </div>
+              </div>
+            </div>
+
             <!-- Theme Toggle -->
             <button onclick="toggleTheme()" title="Toggle Theme"
               class="p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all text-xs">
@@ -513,11 +542,6 @@
             <button id="btn-topbar-income" onclick="openNewIncomeModal()"
               class="px-3 py-1.5 rounded-lg bg-[#026047] hover:bg-[#024d39] text-[#fffde8] text-xs font-bold shadow-sm">
               + Income
-            </button>
-            <button id="btn-topbar-signout" onclick="logoutUser()" title="Sign Out & Return to Login Screen"
-              class="px-2.5 py-1.5 rounded-lg border border-red-200 dark:border-red-900/60 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/40 transition-all text-xs font-bold flex items-center gap-1 shadow-sm">
-              <span>🔒</span>
-              <span>Sign Out</span>
             </button>
           </div>
 
@@ -1684,6 +1708,60 @@
     </div>
 
     <!-- ========================================== -->
+    <!-- MODAL 3B: ARSHAD COMMERCIAL SUBMISSION TO FOUNDER -->
+    <!-- ========================================== -->
+    <div id="modal-arshad-submit-founder"
+      class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+      <div
+        class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+          <div class="flex items-center gap-2">
+            <span class="p-2 rounded-lg bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            </span>
+            <div>
+              <h3 class="font-bold text-sm text-slate-900 dark:text-white">Commercial Packaging &amp; Deal Alignment</h3>
+              <p class="text-[11px] text-slate-500">Submit to Founder Pranav Bansode for Market Clearance</p>
+            </div>
+          </div>
+          <button onclick="closeArshadSubmitModal()"
+            class="text-slate-400 hover:text-slate-700 dark:hover:text-white text-xl font-bold">&times;</button>
+        </div>
+
+        <form onsubmit="event.preventDefault(); confirmArshadSubmitToFounder();" class="space-y-3.5">
+          <input type="hidden" id="arshad-submit-lead-id" />
+
+          <div class="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-xs space-y-1">
+            <div class="flex justify-between items-center">
+              <span class="text-blue-700 dark:text-blue-300 font-bold">Client Deal:</span>
+              <strong id="arshad-submit-lead-client-display" class="text-slate-900 dark:text-white"></strong>
+            </div>
+            <div class="text-[11px] text-blue-600 dark:text-blue-400">
+              Submitting commercial packaging will notify all members on the portal and route directly to Founder Pranav Bansode to verify and approve for market launch!
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Commercial Packaging &amp; Market Alignment Notes *</label>
+            <textarea id="arshad-commercial-notes" required rows="3" placeholder="Client commercial terms agreed, proposal link, pricing packaging, go-to-market readiness..."
+              class="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-[#026047]"></textarea>
+          </div>
+
+          <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <button type="button" onclick="closeArshadSubmitModal()"
+              class="px-4 py-2 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold">
+              Cancel
+            </button>
+            <button type="submit"
+              class="px-4 py-2 rounded-lg bg-[#026047] text-[#fffde8] font-bold text-xs hover:bg-[#024d39] transition shadow-sm flex items-center gap-1.5">
+              <span>👑</span> Submit for Founder Market Clearance
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
     <!-- MODAL 4: FOUNDER FINAL DELIVERY APPROVAL   -->
     <!-- ========================================== -->
     <div id="modal-delivery-approval"
@@ -1696,8 +1774,8 @@
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
             </span>
             <div>
-              <h3 class="font-bold text-sm text-slate-900 dark:text-white">Founder Final Delivery Approval</h3>
-              <p class="text-[11px] text-slate-500">Executive Verification & Sign-Off by Pranav Bansode</p>
+              <h3 class="font-bold text-sm text-slate-900 dark:text-white">Founder Market Approval &amp; Clearance</h3>
+              <p class="text-[11px] text-slate-500">Verify Pipeline &bull; Approve to Publish in Market</p>
             </div>
           </div>
           <button onclick="closeDeliveryApprovalModal()"
@@ -1711,18 +1789,18 @@
           <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs space-y-2">
             <div class="font-bold text-slate-900 dark:text-white flex items-center justify-between">
               <span id="delivery-lead-client-display"></span>
-              <span class="px-2 py-0.5 rounded text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-950 font-bold">Ready for Delivery</span>
+              <span class="px-2 py-0.5 rounded text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-950 font-bold">Ready for Market Clearance</span>
             </div>
-            <div id="delivery-lead-flow-summary" class="space-y-1 text-[11px] text-slate-500 border-t border-slate-200 dark:border-slate-700 pt-2">
-              <div>&bull; <strong>1. Lead Scouted:</strong> <span id="delivery-lead-scout">Aryan Bhore</span></div>
+            <div id="delivery-lead-flow-summary" class="space-y-1.5 text-[11px] text-slate-600 dark:text-slate-300 border-t border-slate-200 dark:border-slate-700 pt-2">
+              <div>&bull; <strong>1. Scouted by Aryan:</strong> <span id="delivery-lead-scout">Aryan Bhore</span></div>
               <div>&bull; <strong>2. Technical Engineering:</strong> <span id="delivery-lead-tech">Vivek Gajdhane (Completed)</span></div>
-              <div>&bull; <strong>3. Client Coordination:</strong> <span id="delivery-lead-marketing">Arshad Shaikh (Checked)</span></div>
+              <div>&bull; <strong>3. Commercial Packaging:</strong> <span id="delivery-lead-marketing">Arshad Shaikh (Completed)</span></div>
             </div>
           </div>
 
           <div>
-            <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Founder's Delivery Clearance Notes</label>
-            <textarea id="delivery-founder-notes" rows="2" placeholder="Final client sign-off, invoice clearance, delivery handover notes..."
+            <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Founder's Market Clearance &amp; Sales Launch Notes</label>
+            <textarea id="delivery-founder-notes" rows="2" placeholder="Market publication authorization, sales strategy clearance, contract approved..."
               class="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-[#026047]"></textarea>
           </div>
 
@@ -1733,7 +1811,7 @@
             </button>
             <button type="submit"
               class="px-4 py-2 rounded-lg bg-[#026047] text-[#fffde8] font-black text-xs hover:bg-[#024d39] transition shadow-md flex items-center gap-1.5">
-              <span>🏆</span> Finalize & Approve for Delivery
+              <span>🏆</span> Approve &amp; Publish in Market
             </button>
           </div>
         </form>
