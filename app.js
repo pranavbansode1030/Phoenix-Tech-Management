@@ -459,7 +459,8 @@ function saveNotificationsToStorage() {
   }
 }
 
-function createNotification({ type, title, message, targetRole = 'all', leadId = null, actor = '' }) {
+function createNotification({ type, title, message, targetRole = 'all', leadId = null, actor = '', actorRole = null }) {
+  const callerRole = actorRole || STATE.activeRole;
   const newNotif = {
     id: 'notif-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
     type,
@@ -468,8 +469,9 @@ function createNotification({ type, title, message, targetRole = 'all', leadId =
     targetRole, // 'all', 'pranav', 'vivek', 'arshad', 'aryan'
     leadId,
     actor,
+    actorRole: callerRole, // Track who triggered this action to exclude them from notifications
     timestamp: new Date().toISOString(),
-    readBy: []
+    readBy: callerRole ? [callerRole] : []
   };
 
   if (!Array.isArray(STATE.notifications)) STATE.notifications = [];
@@ -478,7 +480,8 @@ function createNotification({ type, title, message, targetRole = 'all', leadId =
   saveNotificationsToStorage();
 
   const active = STATE.activeRole;
-  const isRelevant = targetRole === 'all' || targetRole === active;
+  // Point 3: Action notifications go to all relevant users EXCEPT the actor who performed the action
+  const isRelevant = (targetRole === 'all' || targetRole === active) && (!callerRole || active !== callerRole);
   if (isRelevant) {
     showToast(`${title}: ${message}`);
   }
@@ -498,9 +501,11 @@ function renderNotificationBell() {
   const list = document.getElementById('notification-list');
   const activeRole = STATE.activeRole;
 
-  const relevant = (STATE.notifications || []).filter(
-    (n) => n.targetRole === 'all' || n.targetRole === activeRole
-  );
+  // Point 3: Filter notifications so the actor does not see notifications of their own action
+  const relevant = (STATE.notifications || []).filter((n) => {
+    if (n.actorRole && n.actorRole === activeRole) return false;
+    return n.targetRole === 'all' || n.targetRole === activeRole;
+  });
 
   const unreadCount = relevant.filter(
     (n) => !(n.readBy || []).includes(activeRole)
@@ -520,8 +525,8 @@ function renderNotificationBell() {
       list.innerHTML = `
         <div class="py-8 text-center text-slate-400">
           <div class="text-2xl mb-1">🔔</div>
-          <div class="text-xs font-bold text-slate-600 dark:text-slate-300">No Notifications Yet</div>
-          <p class="text-[10px] text-slate-400 mt-0.5">Workflow updates across Aryan, Vivek, Arshad &amp; Founder will appear here.</p>
+          <div class="text-xs font-bold text-slate-600 dark:text-slate-300">No New Notifications</div>
+          <p class="text-[10px] text-slate-400 mt-0.5">Workflow updates from other team members will appear here.</p>
         </div>
       `;
     } else {
@@ -1495,8 +1500,8 @@ function updateRoleDisplay() {
     if (topbarPill) {
       topbarPill.innerHTML = `
         <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-        <span class="font-extrabold text-emerald-700 dark:text-emerald-300">Aryan Bhore</span>
         <span class="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-300/40">🎯 Research Lead</span>
+        <span class="font-extrabold text-emerald-700 dark:text-emerald-300">Aryan Bhore</span>
       `;
     }
     if (btnCsv) btnCsv.classList.add('hidden');
@@ -3320,19 +3325,46 @@ function rejectApprovalItem(type, id) {
     );
     saveAppStateToStorage();
     showToast(`Returned "${task.title}" to ${task.assignedToName} for revisions.`);
-  } else if (type === 'lead') {
+  } else if (type === 'lead' || type === 'lead_market') {
     const lead = (STATE.leads || []).find((l) => l.id === id);
-    if (!lead || lead.status !== 'submitted_to_founder') return;
+    if (!lead) return;
     lead.status = 'rejected';
+    lead.stage = 'rejected';
+    lead.rejectedAt = new Date().toISOString();
+    lead.rejectedBy = 'Pranav Bansode (Founder & Director)';
     saveLeadsToStorage();
     syncLeadToSupabase(lead);
+
+    // Remove any linked assigned task so it is cleared from assigned tasks section
+    const linkedTask = (STATE.assignedTasks || []).find((t) => t.leadId === lead.id);
+    if (linkedTask) {
+      STATE.assignedTasks = (STATE.assignedTasks || []).filter((t) => t.leadId !== lead.id);
+      saveAssignedTasksToStorage();
+      const sb = getSupabaseClient();
+      if (sb && linkedTask.id) {
+        sb.from('assigned_tasks').delete().eq('id', linkedTask.id).catch(() => {});
+      }
+    }
+
     recordAuditLog(
       'LEAD_REJECTED',
       `Founder rejected lead "${lead.clientName}" (${formatINR(lead.dealValue)}) submitted by ${lead.submittedBy || 'Aryan Bhore'}`,
       'Pranav Bansode (Founder / Director)'
     );
     saveAppStateToStorage();
-    showToast(`Lead "${lead.clientName}" marked as rejected.`);
+
+    // Point 1 & 2: Notify Aryan & Vivek (actorRole: 'pranav' excludes Founder)
+    createNotification({
+      type: 'LEAD_REJECTED',
+      title: `❌ Lead Rejected: ${lead.clientName}`,
+      message: `Founder declined lead for ${lead.productType}.`,
+      targetRole: 'all',
+      leadId: lead.id,
+      actor: 'Pranav Bansode',
+      actorRole: 'pranav'
+    });
+
+    showToast(`Lead "${lead.clientName}" rejected. Aryan & Vivek notified.`);
   }
 
   renderApprovals();
@@ -3686,22 +3718,137 @@ window.submitAssignTask = submitAssignTask;
 
 function deleteAssignedTask(id) {
   if (!requireFounder('remove delegated tasks')) return;
-  if (!confirm('Are you sure you want to remove this delegated task?')) return;
+  if (!confirm('Are you sure you want to permanently delete this task? It will be removed from the portal and database.')) return;
+  const task = (STATE.assignedTasks || []).find((t) => t.id === id);
   STATE.assignedTasks = (STATE.assignedTasks || []).filter((t) => t.id !== id);
   saveAssignedTasksToStorage();
 
   const sb = getSupabaseClient();
-  if (sb && id && id.includes('-') && !id.startsWith('task-')) {
+  if (sb && id) {
     sb.from('assigned_tasks').delete().eq('id', id).then(({ error }) => {
-      if (error) console.warn('Supabase delete error:', error.message);
-    });
+      if (error) console.warn('Supabase task delete note:', error.message);
+    }).catch(() => {});
   }
 
+  saveAppStateToStorage();
+  recordAuditLog(
+    'TASK_DELETED',
+    `Founder permanently deleted task "${task ? task.title : id}".`,
+    'Pranav Bansode (Founder / Director)'
+  );
   renderAssignProjects();
+  if (STATE.currentTab === 'allocated-work') renderAllocatedWork();
   renderSidebarNav(STATE.currentTab);
-  showToast('Task removed from team workflow.');
+  showToast('Task permanently removed from portal and database.');
 }
 window.deleteAssignedTask = deleteAssignedTask;
+
+window.deleteLead = function (leadId) {
+  if (!requireFounder('delete leads')) return;
+  const lead = (STATE.leads || []).find((l) => l.id === leadId);
+  if (!lead) return;
+
+  if (!confirm(`Are you sure you want to permanently delete lead "${lead.clientName}"?\nIt will be removed from the portal and database.`)) {
+    return;
+  }
+
+  // 1. Remove from STATE.leads
+  STATE.leads = (STATE.leads || []).filter((l) => l.id !== leadId);
+  saveLeadsToStorage();
+
+  // 2. Remove any linked assigned task
+  const linkedTask = (STATE.assignedTasks || []).find((t) => t.leadId === leadId);
+  if (linkedTask) {
+    STATE.assignedTasks = (STATE.assignedTasks || []).filter((t) => t.leadId !== leadId);
+    saveAssignedTasksToStorage();
+    const sb = getSupabaseClient();
+    if (sb && linkedTask.id) {
+      sb.from('assigned_tasks').delete().eq('id', linkedTask.id).catch(() => {});
+    }
+  }
+
+  // 3. Delete from Supabase client_leads table
+  const sb = getSupabaseClient();
+  if (sb && leadId) {
+    sb.from('client_leads').delete().eq('id', leadId).then(({ error }) => {
+      if (error) console.warn('Supabase lead delete note:', error.message);
+    }).catch(() => {});
+  }
+
+  // 4. Audit log & UI refresh
+  saveAppStateToStorage();
+  recordAuditLog(
+    'LEAD_DELETED',
+    `Founder permanently deleted lead "${lead.clientName}" (${formatINR(lead.dealValue)}).`,
+    'Pranav Bansode (Founder / Director)'
+  );
+
+  showToast(`🗑️ Lead "${lead.clientName}" permanently deleted from portal and database.`);
+  renderCurrentTab();
+  if (STATE.currentTab === 'approvals') renderApprovals();
+  renderSidebarNav(STATE.currentTab);
+};
+
+window.deleteIncome = function (id) {
+  if (!requireFounder('permanently delete income records')) return;
+  const inc = (STATE.income || []).find((i) => i.id === id);
+  if (!inc) return;
+
+  if (!confirm(`Are you sure you want to permanently delete income record for "${inc.clientName || inc.source}" (${formatINR(inc.amount)})?\nIt will be removed from the portal and database.`)) {
+    return;
+  }
+
+  STATE.income = (STATE.income || []).filter((i) => i.id !== id);
+  saveAppStateToStorage();
+
+  const sb = getSupabaseClient();
+  if (sb && id) {
+    sb.from('income_records').delete().eq('id', id).catch(() => {});
+  }
+
+  recordAuditLog(
+    'INCOME_DELETED',
+    `Founder permanently deleted income entry of ${formatINR(inc.amount)} for ${inc.clientName || inc.source}.`,
+    'Pranav Bansode (Founder / Director)'
+  );
+
+  showToast(`🗑️ Income record permanently removed from portal and database.`);
+  renderDashboard();
+  renderProjects();
+  if (STATE.currentTab === 'sales-done') renderSalesDone();
+  if (STATE.currentTab === 'approvals') renderApprovals();
+  renderSidebarNav(STATE.currentTab);
+};
+
+window.deleteExpense = function (id) {
+  if (!requireFounder('permanently delete expense records')) return;
+  const exp = (STATE.expenses || []).find((e) => e.id === id);
+  if (!exp) return;
+
+  if (!confirm(`Are you sure you want to permanently delete expense "${exp.title}" (${formatINR(exp.amount)})?\nIt will be removed from the portal and database.`)) {
+    return;
+  }
+
+  STATE.expenses = (STATE.expenses || []).filter((e) => e.id !== id);
+  saveAppStateToStorage();
+
+  const sb = getSupabaseClient();
+  if (sb && id) {
+    sb.from('expense_records').delete().eq('id', id).catch(() => {});
+  }
+
+  recordAuditLog(
+    'EXPENSE_DELETED',
+    `Founder permanently deleted expense entry of ${formatINR(exp.amount)} for ${exp.title}.`,
+    'Pranav Bansode (Founder / Director)'
+  );
+
+  showToast(`🗑️ Expense record permanently removed from portal and database.`);
+  renderDashboard();
+  renderExpenses();
+  if (STATE.currentTab === 'approvals') renderApprovals();
+  renderSidebarNav(STATE.currentTab);
+};
 
 // ==============================================================================
 // ALLOCATED WORK (EMPLOYEE VIEW - ARSHAD SHAIKH, VIVEK GAJDHANE, ARYAN BHORE)
@@ -3742,10 +3889,13 @@ function renderAllocatedWork() {
       `;
     }
 
-    const aryanLeads = (STATE.leads || []).filter(
+    const allAryanLeads = (STATE.leads || []).filter(
       (l) => l.submittedByMemberId === 'mem-04' || (l.submittedBy || '').toLowerCase().includes('aryan')
     );
-    const aryanLeadIds = new Set(aryanLeads.map((l) => l.id));
+    // Point 1: If rejected by founder, vanished from Aryan's active lead box!
+    const aryanLeads = allAryanLeads.filter((l) => l.status !== 'rejected');
+    const aryanRejectedLeads = allAryanLeads.filter((l) => l.status === 'rejected');
+    const aryanLeadIds = new Set(allAryanLeads.map((l) => l.id));
     const linkedTasks = (STATE.assignedTasks || []).filter(
       (t) =>
         (t.leadId && aryanLeadIds.has(t.leadId)) ||
@@ -3761,17 +3911,17 @@ function renderAllocatedWork() {
     const inProgCount = aryanLeads.filter(
       (l) => l.status === 'allocated_to_vivek' || l.status === 'sent_to_arshad_notified_founder'
     ).length;
-    const completedCount = aryanLeads.filter((l) => l.status === 'approved_for_delivery').length;
+    const completedCount = allAryanLeads.filter((l) => l.status === 'published_to_market' || l.status === 'approved_for_delivery').length;
 
     if (metricsEl) {
       metricsEl.innerHTML = `
         <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-          <span class="text-[11px] text-slate-500 font-medium">Created Leads</span>
+          <span class="text-[11px] text-slate-500 font-medium">Active Leads</span>
           <div class="text-xl font-black text-slate-900 dark:text-white mt-1">${totalLeadsCount} Leads</div>
-          <div class="text-[10px] text-slate-400 mt-1">Scouted by Aryan Bhore</div>
+          <div class="text-[10px] text-slate-400 mt-1">In Pipeline (${aryanRejectedLeads.length} Declined in Archive)</div>
         </div>
         <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-          <span class="text-[11px] text-slate-500 font-medium">Allocated to Team</span>
+          <span class="text-[11px] text-slate-500 font-medium">Allocated to Tech</span>
           <div class="text-xl font-black text-blue-600 dark:text-blue-400 mt-1">${allocatedToOthersCount} Allocated</div>
           <div class="text-[10px] text-blue-500 mt-1">Delegated to Vivek / Tech Dept</div>
         </div>
@@ -3781,19 +3931,19 @@ function renderAllocatedWork() {
           <div class="text-[10px] text-amber-500 mt-1">Under development / validation</div>
         </div>
         <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-          <span class="text-[11px] text-slate-500 font-medium">Delivered &amp; Approved</span>
+          <span class="text-[11px] text-slate-500 font-medium">Published Deals</span>
           <div class="text-xl font-black text-[#026047] dark:text-emerald-400 mt-1">${completedCount} Closed</div>
-          <div class="text-[10px] text-emerald-600 mt-1">Founder Sign-off Granted</div>
+          <div class="text-[10px] text-emerald-600 mt-1">Market Launch Approved</div>
         </div>
       `;
     }
 
     if (aryanLeads.length === 0 && myDirectTasks.length === 0) {
-      container.innerHTML = `
+      let emptyMsg = `
         <div class="p-12 text-center bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 space-y-3">
           <div class="text-3xl">🎯</div>
-          <div class="text-sm font-bold text-slate-700 dark:text-slate-300">No Leads or Allocated Work Yet</div>
-          <p class="text-xs text-slate-400 max-w-md mx-auto">Create prospective client leads or allocate project deliverables to team members to track them here.</p>
+          <div class="text-sm font-bold text-slate-700 dark:text-slate-300">No Active Leads in Pipeline</div>
+          <p class="text-xs text-slate-400 max-w-md mx-auto">Active leads scouted by Aryan will appear here. Declined leads are preserved in the historical archive below.</p>
           <div>
             <button onclick="openNewLeadModal()" class="px-4 py-2 rounded-xl bg-[#026047] hover:bg-[#024d39] text-[#fffde8] font-bold text-xs transition shadow-sm inline-flex items-center gap-1.5">
               <span>+</span> Submit First Lead
@@ -3801,18 +3951,63 @@ function renderAllocatedWork() {
           </div>
         </div>
       `;
+
+      if (allAryanLeads.length > 0) {
+        emptyMsg += `
+          <div class="mt-6 p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
+            <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+              <div class="flex items-center gap-1.5 font-bold text-xs text-slate-800 dark:text-slate-200">
+                <span>📋</span> Lead History &amp; Closed Logs (${allAryanLeads.length} Total Scouted)
+              </div>
+              <div class="text-[10px] text-slate-400 font-mono">
+                ${aryanRejectedLeads.length} Declined &bull; ${completedCount} Published
+              </div>
+            </div>
+            <div class="space-y-1.5">
+              ${allAryanLeads.map((l) => {
+                let histBadge = '<span class="px-2 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300">Under Review</span>';
+                if (l.status === 'rejected') {
+                  histBadge = '<span class="px-2 py-0.5 rounded text-[9px] font-bold bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-300">Declined by Founder</span>';
+                } else if (l.status === 'published_to_market' || l.status === 'approved_for_delivery') {
+                  histBadge = '<span class="px-2 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">✓ Published in Market</span>';
+                }
+                return `
+                  <div class="flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-800/40 text-xs">
+                    <div>
+                      <span class="font-bold text-slate-900 dark:text-white">${escapeHtml(l.clientName)}</span>
+                      <span class="text-[10px] text-slate-400 ml-1.5 font-mono">${escapeHtml(l.productType)} &bull; ${formatINR(l.dealValue)}</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      ${histBadge}
+                      <span class="text-[9px] text-slate-400 font-mono">${formatDate(l.submittedAt)}</span>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        `;
+      }
+
+      container.innerHTML = emptyMsg;
       return;
     }
 
-    container.innerHTML = aryanLeads
+    const cardsHtml = aryanLeads
       .map((lead) => {
-        let stageBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">Submitted to Founder</span>';
+        let stageBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">Awaiting Founder Approval</span>';
         if (lead.status === 'allocated_to_vivek') {
           stageBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">Allocated to Vivek (Tech)</span>';
-        } else if (lead.status === 'sent_to_arshad_notified_founder') {
-          stageBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">Tech Done • Commercial Check</span>';
-        } else if (lead.status === 'approved_for_delivery') {
-          stageBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">✓ Delivered &amp; Approved</span>';
+        } else if (lead.status === 'tech_in_progress') {
+          stageBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 animate-pulse">Tech In Progress (Vivek)</span>';
+        } else if (lead.status === 'forwarded_to_arshad' || lead.status === 'sent_to_arshad_notified_founder') {
+          stageBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">Forwarded to Arshad</span>';
+        } else if (lead.status === 'commercial_in_progress') {
+          stageBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 animate-pulse">Commercial Packaging</span>';
+        } else if (lead.status === 'awaiting_founder_market_approval') {
+          stageBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 animate-pulse">Awaiting Market Clearance</span>';
+        } else if (lead.status === 'published_to_market' || lead.status === 'approved_for_delivery') {
+          stageBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">✓ Published in Market</span>';
         }
 
         return `
@@ -3843,17 +4038,13 @@ function renderAllocatedWork() {
 
           <div class="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 text-xs text-slate-700 dark:text-slate-300 space-y-1.5">
             <div class="flex items-center justify-between text-[11px] text-slate-500 border-b border-slate-200/60 dark:border-slate-700/60 pb-1">
-              <span><strong>Work Allocation:</strong> ${lead.allocatedToName ? `<span class="font-bold text-blue-600 dark:text-blue-400">💻 ${escapeHtml(lead.allocatedToName)} (Technical Dept)</span>` : '<span class="text-slate-400">Awaiting Founder Technical Allocation</span>'}</span>
+              <span><strong>Work Allocation:</strong> ${lead.allocatedToName ? `<span class="font-bold text-blue-600 dark:text-blue-400">💻 ${escapeHtml(lead.allocatedToName)} (Technical Dept)</span>` : '<span class="text-slate-400">Awaiting Founder Approval</span>'}</span>
               <span>Target Due: <strong class="text-slate-900 dark:text-white font-bold">${lead.dueDate ? formatDate(lead.dueDate) : 'Pending'}</strong></span>
             </div>
             <div class="text-[11px] leading-relaxed">
               <span class="font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-[10px] block">Aryan's Scouted Scope:</span>
               ${escapeHtml(lead.requirements)}
             </div>
-            ${lead.founderInstructions ? `
-            <div class="text-[11px] pt-1 border-t border-slate-200/60 dark:border-slate-700/60 text-slate-600 dark:text-slate-400">
-              <span class="font-bold text-[#026047] dark:text-emerald-400">Founder Allocation Scope:</span> ${escapeHtml(lead.founderInstructions)}
-            </div>` : ''}
           </div>
 
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 text-xs">
@@ -3867,9 +4058,9 @@ function renderAllocatedWork() {
                   ? `<a href="${escapeHtml(lead.deliverableUrl)}" target="_blank" class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition inline-flex items-center gap-1.5 shadow-sm">
                       <span>🔗</span> View Technical Deliverable
                     </a>`
-                  : lead.allocatedTo
+                  : lead.allocatedTo && lead.status !== 'submitted_to_founder'
                   ? `<span class="px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-medium text-xs">💻 Work allocated to ${escapeHtml(lead.allocatedToName || 'Vivek')}</span>`
-                  : `<span class="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-medium text-xs">⏳ Awaiting Founder Allocation</span>`
+                  : `<span class="px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 font-medium text-xs">⏳ Awaiting Founder Clearance</span>`
               }
             </div>
           </div>
@@ -3877,6 +4068,50 @@ function renderAllocatedWork() {
         `;
       })
       .join('');
+
+    let historySection = '';
+    if (allAryanLeads.length > 0) {
+      historySection = `
+        <div class="mt-6 p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
+          <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+            <div class="flex items-center gap-1.5 font-bold text-xs text-slate-800 dark:text-slate-200">
+              <span>📋</span> Historical Lead Archive (${allAryanLeads.length} Total Scouted)
+            </div>
+            <div class="text-[10px] text-slate-400 font-mono">
+              ${aryanRejectedLeads.length} Declined &bull; ${completedCount} Published
+            </div>
+          </div>
+          <div class="space-y-1.5">
+            ${allAryanLeads.map((l) => {
+              let histBadge = '<span class="px-2 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300">Under Review</span>';
+              if (l.status === 'rejected') {
+                histBadge = '<span class="px-2 py-0.5 rounded text-[9px] font-bold bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-300">Declined by Founder</span>';
+              } else if (l.status === 'published_to_market' || l.status === 'approved_for_delivery') {
+                histBadge = '<span class="px-2 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">✓ Published in Market</span>';
+              } else if (l.status === 'allocated_to_vivek' || l.status === 'tech_in_progress') {
+                histBadge = '<span class="px-2 py-0.5 rounded text-[9px] font-bold bg-purple-50 text-purple-700 dark:bg-purple-950 dark:text-purple-300">In Tech Engineering</span>';
+              } else if (l.status === 'forwarded_to_arshad' || l.status === 'commercial_in_progress') {
+                histBadge = '<span class="px-2 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300">Commercial Packaging</span>';
+              }
+              return `
+                <div class="flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-800/40 text-xs">
+                  <div>
+                    <span class="font-bold text-slate-900 dark:text-white">${escapeHtml(l.clientName)}</span>
+                    <span class="text-[10px] text-slate-400 ml-1.5 font-mono">${escapeHtml(l.productType)} &bull; ${formatINR(l.dealValue)}</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    ${histBadge}
+                    <span class="text-[9px] text-slate-400 font-mono">${formatDate(l.submittedAt)}</span>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    container.innerHTML = cardsHtml + historySection;
     return;
   }
 
@@ -3946,7 +4181,15 @@ function renderAllocatedWork() {
         let actionControl = '';
         if (task.leadId) {
           const linkedLead = (STATE.leads || []).find((l) => l.id === task.leadId);
-          if (task.status === 'assigned' || (linkedLead && linkedLead.status === 'allocated_to_vivek')) {
+          if (linkedLead && (linkedLead.status === 'submitted_to_founder' || linkedLead.status === 'rejected')) {
+            const isRej = linkedLead.status === 'rejected';
+            actionControl = `
+              <button disabled title="${isRej ? 'Lead Rejected by Founder' : 'Awaiting Founder Approval'}"
+                class="px-3.5 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-500 font-bold text-xs cursor-not-allowed flex items-center gap-1.5 shadow-sm opacity-70">
+                <span>${isRej ? '⛔' : '🔒'}</span> Start Work (${isRej ? 'Lead Rejected' : 'Awaiting Founder Approval'})
+              </button>
+            `;
+          } else if (task.status === 'assigned' || (linkedLead && linkedLead.status === 'allocated_to_vivek')) {
             actionControl = `
               <button onclick="startVivekTechWork('${safeId(task.leadId)}')"
                 class="px-3.5 py-1.5 rounded-lg bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs transition flex items-center gap-1.5 shadow-sm">
@@ -4138,10 +4381,13 @@ function renderSingleLeadCard(rawLead, currentRole) {
   const s4Done = lead.status === 'published_to_market' || lead.status === 'approved_for_delivery';
   const s4Active = lead.status === 'awaiting_founder_market_approval';
 
-  let currentStageText = 'Stage 1: Lead Scouted by Aryan';
+  let currentStageText = 'Stage 1: Awaiting Founder Clearance';
   let badgeColor = 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-300';
-  if (lead.status === 'allocated_to_vivek') {
-    currentStageText = 'Stage 2: Directly Routed to Vivek (Tech)';
+  if (lead.status === 'rejected') {
+    currentStageText = 'Declined by Founder';
+    badgeColor = 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border-rose-300';
+  } else if (lead.status === 'allocated_to_vivek') {
+    currentStageText = 'Stage 2: Approved by Founder • Vivek Assigned';
     badgeColor = 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border-purple-300';
   } else if (lead.status === 'tech_in_progress') {
     currentStageText = 'Stage 2: Vivek Tech In Progress';
@@ -4163,7 +4409,29 @@ function renderSingleLeadCard(rawLead, currentRole) {
   const safeDeliverable = lead.deliverableUrl ? sanitizeUrl(lead.deliverableUrl) : '';
 
   let actionButtons = '';
-  if (lead.status === 'allocated_to_vivek' && (isVivek || isPranav)) {
+  // Point 2 & 4: Before founder approval, Vivek CANNOT start work ("Start Work" button is disabled)
+  if (lead.status === 'submitted_to_founder') {
+    if (isVivek) {
+      actionButtons = `
+        <button disabled
+          class="px-3.5 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed text-xs font-bold flex items-center gap-1.5 opacity-60 border border-slate-300 dark:border-slate-700 shadow-none"
+          title="Awaiting Founder Pranav's Approval before technical development can start">
+          <span>🔒</span> Start Work (Awaiting Founder Approval)
+        </button>
+      `;
+    } else if (isPranav) {
+      actionButtons = `
+        <button onclick="approveLeadByFounder('${lid}')"
+          class="px-3.5 py-1.5 rounded-xl bg-[#026047] hover:bg-[#024d39] text-[#fffde8] font-bold text-xs transition shadow-sm flex items-center gap-1.5 cursor-pointer">
+          <span>👑</span> Approve Lead
+        </button>
+        <button onclick="rejectApprovalItem('lead', '${lid}')"
+          class="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 font-bold text-xs transition inline-flex items-center gap-1 cursor-pointer">
+          <span>✕</span> Reject Lead
+        </button>
+      `;
+    }
+  } else if (lead.status === 'allocated_to_vivek' && (isVivek || isPranav)) {
     actionButtons = `
       <button onclick="startVivekTechWork('${lid}')"
         class="px-3.5 py-1.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs transition shadow-sm flex items-center gap-1.5 cursor-pointer">
@@ -4203,6 +4471,23 @@ function renderSingleLeadCard(rawLead, currentRole) {
       <span class="px-3 py-1.5 rounded-xl bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-bold text-xs flex items-center gap-1.5">
         <span>🏆</span> Published in Market for Sale
       </span>
+    `;
+  } else if (lead.status === 'rejected') {
+    actionButtons = `
+      <span class="px-3 py-1.5 rounded-xl bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 font-bold text-xs flex items-center gap-1">
+        <span>✕</span> Declined by Founder
+      </span>
+    `;
+  }
+
+  // Point 7: Founder can permanently delete/remove lead from portal and database
+  if (isPranav) {
+    actionButtons += `
+      <button onclick="deleteLead('${lid}')"
+        class="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-rose-50 hover:text-rose-700 text-slate-500 dark:bg-slate-800 dark:hover:bg-rose-950 transition text-xs font-bold flex items-center gap-1 cursor-pointer"
+        title="Permanently Delete Lead from Portal and Database">
+        <span>🗑️</span> Delete
+      </button>
     `;
   }
 
@@ -4454,7 +4739,8 @@ window.submitClientLead = function () {
   const newLeadId = 'lead-' + Date.now();
   const leadNum = 'LEAD-2026-' + String((STATE.leads || []).length + 1).padStart(3, '0');
 
-  // Lead directly goes to Vivek Gajdhane (Technical Dept)
+  // Point 1, 4 & 6: Lead goes directly to Founder for approval first!
+  // Task is NOT created in Assigned Tasks until Founder approves in the Approval section!
   const newLead = normalizeLead({
     id: newLeadId,
     leadNumber: leadNum,
@@ -4467,61 +4753,103 @@ window.submitClientLead = function () {
     submittedBy: submitter,
     submittedByMemberId: getCurrentMemberId(),
     submittedAt: new Date().toISOString(),
-    status: 'allocated_to_vivek',
-    stage: 'allocated_to_vivek',
+    status: 'submitted_to_founder',
+    stage: 'submitted_to_founder',
     allocatedTo: 'mem-03',
     allocatedToName: 'Vivek Gajdhane',
-    allocatedAt: new Date().toISOString(),
     dueDate: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
   });
-
-  // Automatically create task directly in Vivek's queue
-  const newTask = {
-    id: 'task-lead-' + Date.now(),
-    title: `Develop ${newLead.productType} for ${newLead.clientName}`,
-    assignedTo: 'mem-03',
-    assignedToName: 'Vivek Gajdhane',
-    projectId: (newLead.productType || '').includes('Smart Review') ? 'prj-srm' : 'prj-leadx',
-    projectName: newLead.productType,
-    priority: 'high',
-    dueDate: newLead.dueDate,
-    assignedDate: new Date().toISOString().split('T')[0],
-    assignedBy: `${newLead.submittedBy} (Research Lead)`,
-    description: `[Lead ${newLead.leadNumber}]: ${requirements}`,
-    status: 'assigned',
-    leadId: newLead.id,
-  };
-
-  STATE.assignedTasks.unshift(newTask);
-  saveAssignedTasksToStorage();
-  syncAssignedTaskToSupabase(newTask);
 
   STATE.leads.unshift(newLead);
   saveLeadsToStorage();
   recordAuditLog(
-    'LEAD_CREATED_VIVEK_ALLOCATED',
-    `${newLead.submittedBy} created lead "${clientName}" (${formatINR(dealValue)}) — routed directly to Vivek Gajdhane for technical development.`,
+    'LEAD_SUBMITTED_TO_FOUNDER',
+    `${newLead.submittedBy} created lead "${clientName}" (${formatINR(dealValue)}) — sent to Founder for clearance.`,
     newLead.submittedBy
   );
   saveAppStateToStorage();
   syncLeadToSupabase(newLead);
 
-  // Notify rest of users on portal
+  // Point 3 & 5: Minimal notification to all users EXCEPT Aryan
   createNotification({
-    type: 'LEAD_CREATED_VIVEK_ASSIGNED',
-    title: '🎯 New Lead Directly to Vivek',
-    message: `${newLead.submittedBy} created lead "${clientName}" (${formatINR(dealValue)}) for ${newLead.productType}. Directly routed to Vivek for technical development.`,
+    type: 'LEAD_CREATED',
+    title: `🎯 New Lead: ${clientName}`,
+    message: `Aryan scouted "${clientName}" (${formatINR(dealValue)}). Awaiting Founder clearance.`,
     targetRole: 'all',
     leadId: newLead.id,
-    actor: newLead.submittedBy
+    actor: newLead.submittedBy,
+    actorRole: 'aryan'
   });
 
   closeNewLeadModal();
   const form = document.querySelector('#modal-new-lead form');
   if (form) form.reset();
 
-  showToast(`🎯 Lead "${clientName}" created! Routed directly to Vivek Gajdhane & team notified.`);
+  showToast(`🎯 Lead "${clientName}" sent to Founder Pranav for approval.`);
   renderCurrentTab();
+  if (STATE.currentTab === 'approvals') renderApprovals();
+  renderSidebarNav(STATE.currentTab);
+};
+
+window.approveLeadByFounder = function (leadId) {
+  if (!requireFounder('approve client leads')) return;
+  const lead = (STATE.leads || []).find((l) => l.id === leadId);
+  if (!lead) return;
+
+  lead.status = 'allocated_to_vivek';
+  lead.stage = 'allocated_to_vivek';
+  lead.approvedByFounder = true;
+  lead.founderApprovedAt = new Date().toISOString();
+  lead.allocatedAt = new Date().toISOString();
+  lead.allocatedTo = 'mem-03';
+  lead.allocatedToName = 'Vivek Gajdhane';
+
+  // Point 6: After approving by founder then and then only the assigned task section will update with that task!
+  const existingTask = (STATE.assignedTasks || []).find((t) => t.leadId === lead.id);
+  if (!existingTask) {
+    const newTask = {
+      id: 'task-lead-' + Date.now(),
+      title: `Develop ${lead.productType} for ${lead.clientName}`,
+      assignedTo: 'mem-03',
+      assignedToName: 'Vivek Gajdhane',
+      projectId: (lead.productType || '').includes('Smart Review') ? 'prj-srm' : 'prj-leadx',
+      projectName: lead.productType,
+      priority: lead.priority || 'high',
+      dueDate: lead.dueDate || new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+      assignedDate: new Date().toISOString().split('T')[0],
+      assignedBy: 'Pranav Bansode (Founder)',
+      description: `[Lead ${lead.leadNumber}]: ${lead.requirements}`,
+      status: 'assigned',
+      leadId: lead.id,
+    };
+    STATE.assignedTasks.unshift(newTask);
+    saveAssignedTasksToStorage();
+    syncAssignedTaskToSupabase(newTask);
+  }
+
+  saveLeadsToStorage();
+  recordAuditLog(
+    'LEAD_APPROVED_BY_FOUNDER',
+    `Founder approved lead "${lead.clientName}" (${formatINR(lead.dealValue)}) and allocated technical development to Vivek Gajdhane.`,
+    'Pranav Bansode (Founder / Director)'
+  );
+  saveAppStateToStorage();
+  syncLeadToSupabase(lead);
+
+  // Point 3 & 5: Minimal notification to all users EXCEPT Founder Pranav
+  createNotification({
+    type: 'LEAD_APPROVED',
+    title: `✅ Lead Approved: ${lead.clientName}`,
+    message: `Founder approved lead. Assigned to Vivek for technical development.`,
+    targetRole: 'all',
+    leadId: lead.id,
+    actor: 'Pranav Bansode',
+    actorRole: 'pranav'
+  });
+
+  showToast(`✅ Lead "${lead.clientName}" approved! Work assigned to Vivek Gajdhane.`);
+  renderCurrentTab();
+  if (STATE.currentTab === 'approvals') renderApprovals();
   renderSidebarNav(STATE.currentTab);
 };
 
@@ -4529,6 +4857,16 @@ window.startVivekTechWork = function (leadId) {
   if (!requireAuth('start technical development')) return;
   const lead = (STATE.leads || []).find((l) => l.id === leadId);
   if (!lead) return;
+
+  // Point 4: Vivek cannot start work before founder approval!
+  if (lead.status === 'submitted_to_founder') {
+    alert('Security Gate: Founder Pranav Bansode must verify and approve this lead before technical development can start.');
+    return;
+  }
+  if (lead.status === 'rejected') {
+    alert('Security Gate: This lead was rejected by Founder Pranav and cannot be started.');
+    return;
+  }
 
   lead.status = 'tech_in_progress';
   lead.stage = 'tech_in_progress';
@@ -4550,14 +4888,15 @@ window.startVivekTechWork = function (leadId) {
   saveAppStateToStorage();
   syncLeadToSupabase(lead);
 
-  // Strictly ONLY notify Founder ("whenever vivek starts its work it will only notify founder")
+  // Point 3 & 5: Minimal notification strictly to Founder (actorRole: 'vivek')
   createNotification({
     type: 'TECH_STARTED',
-    title: '💻 Vivek Started Tech Work',
-    message: `Vivek Gajdhane has started technical engineering for "${lead.clientName}" (${lead.productType}).`,
+    title: `💻 Tech Started: ${lead.clientName}`,
+    message: `Vivek started technical development for "${lead.clientName}".`,
     targetRole: 'pranav',
     leadId: lead.id,
-    actor: 'Vivek Gajdhane'
+    actor: 'Vivek Gajdhane',
+    actorRole: 'vivek'
   });
 
   showToast(`🚀 Tech work started for "${lead.clientName}"! Founder Pranav notified.`);
@@ -4736,14 +5075,15 @@ window.confirmTechForward = function () {
   saveAppStateToStorage();
   syncLeadToSupabase(lead);
 
-  // "as he finishesh with that he will forward the work to arshad with an descriptive note and will notify every each user on portal."
+  // Point 3 & 5: Minimal notification to all users EXCEPT Vivek
   createNotification({
     type: 'TECH_FORWARDED_TO_ARSHAD',
-    title: '📤 Tech Completed & Forwarded to Arshad',
-    message: `Vivek completed tech deliverables for "${lead.clientName}" and forwarded to Arshad Shaikh. Note: "${techNotes.slice(0, 80)}${techNotes.length > 80 ? '...' : ''}"`,
+    title: `📤 Tech Completed: ${lead.clientName}`,
+    message: `Vivek completed tech and forwarded to Arshad for commercial packaging.`,
     targetRole: 'all',
     leadId: lead.id,
-    actor: 'Vivek Gajdhane'
+    actor: 'Vivek Gajdhane',
+    actorRole: 'vivek'
   });
 
   if (urlEl) urlEl.value = '';
@@ -4773,14 +5113,15 @@ window.startArshadCommercialWork = function (leadId) {
   saveAppStateToStorage();
   syncLeadToSupabase(lead);
 
-  // Strictly ONLY notify Founder ("if he starts to work it will notify me")
+  // Point 3 & 5: Minimal notification strictly to Founder (actorRole: 'arshad' excludes Arshad)
   createNotification({
     type: 'COMMERCIAL_STARTED',
-    title: '🤝 Arshad Started Commercial Work',
-    message: `Arshad Shaikh started commercial packaging, pricing terms & market alignment for "${lead.clientName}".`,
+    title: `🤝 Packaging Started: ${lead.clientName}`,
+    message: `Arshad started commercial review & pricing alignment.`,
     targetRole: 'pranav',
     leadId: lead.id,
-    actor: 'Arshad Shaikh'
+    actor: 'Arshad Shaikh',
+    actorRole: 'arshad'
   });
 
   showToast(`🤝 Commercial packaging started for "${lead.clientName}"! Founder notified.`);
@@ -4833,14 +5174,15 @@ window.confirmArshadSubmitToFounder = function () {
   saveAppStateToStorage();
   syncLeadToSupabase(lead);
 
-  // "and after finishing it will notify each single user on portal. And it will directly goes to founder to verify and apporve this to publish in market to make a better sale."
+  // Point 3 & 5: Minimal notification to all users EXCEPT Arshad
   createNotification({
     type: 'SUBMITTED_TO_FOUNDER_MARKET',
-    title: '👑 Submitted for Founder Market Clearance',
-    message: `Arshad finished commercial packaging for "${lead.clientName}". Submitted directly to Founder Pranav for market clearance & publish approval!`,
+    title: `👑 Commercial Ready: ${lead.clientName}`,
+    message: `Arshad submitted deal to Founder for Market Clearance & Publish Approval.`,
     targetRole: 'all',
     leadId: lead.id,
-    actor: 'Arshad Shaikh'
+    actor: 'Arshad Shaikh',
+    actorRole: 'arshad'
   });
 
   if (notesEl) notesEl.value = '';
@@ -4971,14 +5313,15 @@ window.confirmDeliveryApproval = function () {
   saveAppStateToStorage();
   syncLeadToSupabase(lead);
 
-  // "notify each single user on portal"
+  // Point 3 & 5: Minimal notification to all users EXCEPT Founder Pranav
   createNotification({
     type: 'MARKET_PUBLISH_APPROVED',
-    title: '🎉 Deal Approved & Published in Market!',
-    message: `Founder Pranav Bansode verified and approved "${lead.clientName}" (${formatINR(lead.dealValue)}) for official market publication & sales launch!`,
+    title: `🎉 Deal Published: ${lead.clientName}`,
+    message: `Founder approved & published "${lead.clientName}" in market for sales (${formatINR(lead.dealValue)})!`,
     targetRole: 'all',
     leadId: lead.id,
-    actor: 'Pranav Bansode'
+    actor: 'Pranav Bansode',
+    actorRole: 'pranav'
   });
 
   if (founderNotesEl) founderNotesEl.value = '';
