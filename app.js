@@ -772,6 +772,9 @@ function renderSidebarNav(activeTab) {
 
   const currentMemberId = currentRole === 'arshad' ? 'mem-02' : (currentRole === 'aryan' ? 'mem-04' : 'mem-03');
   const myAssignedTasksCount = (STATE.assignedTasks || []).filter((t) => t.assignedTo === currentMemberId && t.status !== 'completed').length;
+  const aryanAllocatedCount = (STATE.leads || []).filter(
+    (l) => (l.submittedByMemberId === 'mem-04' || (l.submittedBy || '').toLowerCase().includes('aryan')) && l.status !== 'rejected'
+  ).length;
 
   if (currentRole === 'pranav') {
     // Founder: Full executive options organized logically
@@ -927,9 +930,9 @@ function renderSidebarNav(activeTab) {
         <div class="flex-1 min-w-0">
           <div class="truncate font-black flex items-center justify-between">
             <span>2. Allocated Work</span>
-            <span class="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-white/20 text-white">${myAssignedTasksCount}</span>
+            <span class="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-white/20 text-white">${aryanAllocatedCount}</span>
           </div>
-          <div class="text-[9px] opacity-75 truncate font-normal">Tasks Delegated by Founder</div>
+          <div class="text-[9px] opacity-75 truncate font-normal">Allocated Work &amp; Created Leads</div>
         </div>
       </button>
 
@@ -2397,6 +2400,137 @@ function renderEmployeeDashboard(memberId) {
           : ''
       }
 
+      ${
+        isAryan
+          ? (() => {
+              const aryanLeads = (STATE.leads || []).filter(
+                (l) => l.submittedByMemberId === 'mem-04' || (l.submittedBy || '').toLowerCase().includes('aryan')
+              );
+              const aryanLeadIds = new Set(aryanLeads.map((l) => l.id));
+              const linkedTasks = (STATE.assignedTasks || []).filter(
+                (t) =>
+                  (t.leadId && aryanLeadIds.has(t.leadId)) ||
+                  (t.description || '').toLowerCase().includes("aryan's lead")
+              );
+              const allocatedCount = aryanLeads.filter(
+                (l) => l.allocatedTo || l.status === 'allocated_to_vivek' || l.status === 'sent_to_arshad_notified_founder'
+              ).length;
+              const inProgressCount = aryanLeads.filter(
+                (l) => l.status === 'allocated_to_vivek' || l.status === 'sent_to_arshad_notified_founder'
+              ).length;
+              const deliveredCount = aryanLeads.filter((l) => l.status === 'approved_for_delivery').length;
+
+              return `
+      <!-- Allocated Work & Created Leads Section in Aryan's Profile -->
+      <div class="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="px-2 py-0.5 rounded text-[10px] font-black bg-[#026047] text-[#fffde8] uppercase tracking-wider">Allocated Work</span>
+              <h3 class="text-base font-bold text-slate-900 dark:text-white">Work Allocated to Others &amp; Created Leads</h3>
+            </div>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Client leads created by Aryan Bhore and technical / execution work allocated across the team.
+            </p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button onclick="openNewLeadModal()" class="px-3 py-1.5 rounded-lg bg-[#026047] hover:bg-[#024d39] text-[#fffde8] font-bold text-xs transition flex items-center gap-1.5 shadow-sm">
+              <span>+</span> Submit New Lead
+            </button>
+            <button onclick="switchTab('allocated-work')" class="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs transition">
+              Full View &rarr;
+            </button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+          <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800">
+            <span class="text-[10px] text-slate-400 uppercase font-bold block">Leads Created</span>
+            <span class="text-lg font-black text-slate-900 dark:text-white">${aryanLeads.length}</span>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800">
+            <span class="text-[10px] text-slate-400 uppercase font-bold block">Allocated to Tech</span>
+            <span class="text-lg font-black text-blue-600 dark:text-blue-400">${allocatedCount}</span>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800">
+            <span class="text-[10px] text-slate-400 uppercase font-bold block">In Progress</span>
+            <span class="text-lg font-black text-amber-600 dark:text-amber-400">${inProgressCount}</span>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800">
+            <span class="text-[10px] text-slate-400 uppercase font-bold block">Delivered &amp; Done</span>
+            <span class="text-lg font-black text-[#026047] dark:text-emerald-400">${deliveredCount}</span>
+          </div>
+        </div>
+
+        <div class="space-y-3">
+          ${
+            aryanLeads.length === 0
+              ? '<div class="p-8 text-center text-slate-400 italic">No client leads created yet. Click "+ Submit New Lead" to record prospective deals.</div>'
+              : aryanLeads
+                  .map((lead) => {
+                    let stageBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">Submitted to Founder</span>';
+                    if (lead.status === 'allocated_to_vivek') {
+                      stageBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">Allocated to Vivek (Tech)</span>';
+                    } else if (lead.status === 'sent_to_arshad_notified_founder') {
+                      stageBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">Tech Done • Commercial Check</span>';
+                    } else if (lead.status === 'approved_for_delivery') {
+                      stageBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">✓ Delivered &amp; Approved</span>';
+                    }
+
+                    return `
+            <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-3">
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="px-2 py-0.5 rounded font-mono text-[10px] font-bold bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200">${escapeHtml(lead.leadNumber)}</span>
+                  ${stageBadge}
+                  <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-[#fffde8] text-[#026047] border border-[#026047]/30">${escapeHtml(lead.productType)}</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="font-black text-sm text-[#026047] dark:text-emerald-400">${formatINR(lead.dealValue)}</span>
+                  <button onclick="openEditPricingModal('${lead.id}')" class="px-2 py-0.5 rounded text-[10px] font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 hover:border-emerald-500 text-slate-700 dark:text-slate-300 transition flex items-center gap-1 shadow-xs" title="Edit Lead Pricing">
+                    <span>✏️</span> Edit Price
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <h4 class="font-bold text-sm text-slate-900 dark:text-white">${escapeHtml(lead.clientName)}</h4>
+                <div class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Contact: <span class="text-slate-700 dark:text-slate-300 font-medium">${escapeHtml(lead.contactPerson || 'Direct')}</span>
+                  ${lead.phone ? ` • <span class="font-mono">${escapeHtml(lead.phone)}</span>` : ''}
+                  ${lead.email ? ` • <span class="font-mono">${escapeHtml(lead.email)}</span>` : ''}
+                </div>
+              </div>
+
+              <div class="p-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-xs space-y-1.5">
+                <div class="flex items-center justify-between text-[11px] text-slate-500 border-b border-slate-100 dark:border-slate-800 pb-1">
+                  <span><strong>Work Allocation:</strong> ${lead.allocatedToName ? `<span class="font-bold text-blue-600 dark:text-blue-400">💻 ${escapeHtml(lead.allocatedToName)} (Technical Dept)</span>` : '<span class="text-slate-400">Awaiting Founder Technical Allocation</span>'}</span>
+                  <span>${lead.dueDate ? `Target Due: <strong class="text-slate-700 dark:text-slate-300">${formatDate(lead.dueDate)}</strong>` : `Created: ${formatDate(lead.submittedAt)}`}</span>
+                </div>
+                <div class="text-slate-600 dark:text-slate-300 text-[11px] leading-relaxed">
+                  <span class="font-bold text-slate-500 dark:text-slate-400">Scope:</span> ${escapeHtml(lead.requirements)}
+                </div>
+                ${lead.founderInstructions ? `
+                <div class="text-[11px] text-slate-600 dark:text-slate-400 pt-1 border-t border-slate-100 dark:border-slate-800">
+                  <span class="font-bold text-[#026047] dark:text-emerald-400">Founder Allocation Scope:</span> ${escapeHtml(lead.founderInstructions)}
+                </div>` : ''}
+                ${lead.deliverableUrl ? `
+                <div class="text-[11px] pt-1">
+                  <a href="${escapeHtml(lead.deliverableUrl)}" target="_blank" class="inline-flex items-center gap-1 font-bold text-blue-600 dark:text-blue-400 hover:underline">
+                    <span>🔗</span> View Technical Deliverable / PR
+                  </a>
+                </div>` : ''}
+              </div>
+            </div>
+            `;
+                  })
+                  .join('')
+          }
+        </div>
+      </div>
+      `;
+            })()
+          : `
       <!-- Assigned Projects & Key Deliverables + Incentives -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div class="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
@@ -2413,9 +2547,7 @@ function renderEmployeeDashboard(memberId) {
               <p class="text-[11px] text-slate-600 dark:text-slate-400">
                 ${isArshad
                   ? 'Scheduling client pitch meetings, outbound B2B marketing, campaign analytics & lead qualification funnel.'
-                  : (isAryan
-                      ? 'Market research, prospective client discovery, B2B lead generation, and client requirement analysis.'
-                      : 'AWS cluster infrastructure, scraper algorithms, pipeline architecture, database indexing & dashboard UI.')}
+                  : 'AWS cluster infrastructure, scraper algorithms, pipeline architecture, database indexing & dashboard UI.'}
               </p>
             </div>
             <div class="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-1">
@@ -2426,9 +2558,7 @@ function renderEmployeeDashboard(memberId) {
               <p class="text-[11px] text-slate-600 dark:text-slate-400">
                 ${isArshad
                   ? 'Hospitality outreach, client onboarding, business idea research, digital strategy and growth marketing.'
-                  : (isAryan
-                      ? 'Hospitality market research, sentiment analytics scouting, and target client pipeline intake.'
-                      : 'Sentiment analysis NLP model integration, feedback capture portals, QR routing engine & API webhooks.')}
+                  : 'Sentiment analysis NLP model integration, feedback capture portals, QR routing engine & API webhooks.'}
               </p>
             </div>
           </div>
@@ -2457,7 +2587,8 @@ function renderEmployeeDashboard(memberId) {
             </div>
           </div>
         </div>
-      </div>
+      </div>`
+      }
     `;
   }
 }
@@ -3198,6 +3329,7 @@ function renderAllocatedWork() {
   if (!container) return;
 
   const currentRole = STATE.activeRole || 'arshad';
+  const isAryan = currentRole === 'aryan';
   const currentMemberId = getCurrentMemberId();
   const currentMember = (STATE.team || []).find((m) => m.id === currentMemberId) || {
     name: MEMBER_NAME_MAP[currentMemberId] || 'Team Member',
@@ -3206,7 +3338,167 @@ function renderAllocatedWork() {
   const displayRole =
     currentMember.designation ||
     currentMember.role ||
-    (currentRole === 'aryan' ? 'Research Lead' : 'Technical Department');
+    (isAryan ? 'Research Lead' : 'Technical Department');
+
+  // Header badges & titles
+  const badgeEl = document.getElementById('allocated-work-badge');
+  const titleEl = document.getElementById('allocated-work-title');
+  const subtitleEl = document.getElementById('allocated-work-subtitle');
+
+  if (isAryan) {
+    if (badgeEl) badgeEl.textContent = 'Allocated Work';
+    if (titleEl) titleEl.textContent = 'Work Allocated to Others & Created Leads';
+    if (subtitleEl) subtitleEl.textContent = 'Client leads created by Aryan Bhore and technical / execution work allocated across the team.';
+    if (sessionPill) {
+      sessionPill.innerHTML = `
+        <span>Allocated Work: </span>
+        <strong class="text-slate-900 dark:text-white font-black">Aryan Bhore</strong>
+        <span class="text-[10px] text-slate-500 ml-1">(Research Lead • Created Leads &amp; Work Allocated to Others)</span>
+      `;
+    }
+
+    const aryanLeads = (STATE.leads || []).filter(
+      (l) => l.submittedByMemberId === 'mem-04' || (l.submittedBy || '').toLowerCase().includes('aryan')
+    );
+    const aryanLeadIds = new Set(aryanLeads.map((l) => l.id));
+    const linkedTasks = (STATE.assignedTasks || []).filter(
+      (t) =>
+        (t.leadId && aryanLeadIds.has(t.leadId)) ||
+        (t.assignedBy || '').toLowerCase().includes('aryan') ||
+        (t.description || '').toLowerCase().includes("aryan's lead")
+    );
+    const myDirectTasks = (STATE.assignedTasks || []).filter((t) => t.assignedTo === 'mem-04');
+
+    const totalLeadsCount = aryanLeads.length;
+    const allocatedToOthersCount = aryanLeads.filter(
+      (l) => l.allocatedTo || l.status === 'allocated_to_vivek' || l.status === 'sent_to_arshad_notified_founder'
+    ).length;
+    const inProgCount = aryanLeads.filter(
+      (l) => l.status === 'allocated_to_vivek' || l.status === 'sent_to_arshad_notified_founder'
+    ).length;
+    const completedCount = aryanLeads.filter((l) => l.status === 'approved_for_delivery').length;
+
+    if (metricsEl) {
+      metricsEl.innerHTML = `
+        <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+          <span class="text-[11px] text-slate-500 font-medium">Created Leads</span>
+          <div class="text-xl font-black text-slate-900 dark:text-white mt-1">${totalLeadsCount} Leads</div>
+          <div class="text-[10px] text-slate-400 mt-1">Scouted by Aryan Bhore</div>
+        </div>
+        <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+          <span class="text-[11px] text-slate-500 font-medium">Allocated to Team</span>
+          <div class="text-xl font-black text-blue-600 dark:text-blue-400 mt-1">${allocatedToOthersCount} Allocated</div>
+          <div class="text-[10px] text-blue-500 mt-1">Delegated to Vivek / Tech Dept</div>
+        </div>
+        <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+          <span class="text-[11px] text-slate-500 font-medium">In Progress &amp; Review</span>
+          <div class="text-xl font-black text-amber-600 dark:text-amber-400 mt-1">${inProgCount} In Delivery</div>
+          <div class="text-[10px] text-amber-500 mt-1">Under development / validation</div>
+        </div>
+        <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+          <span class="text-[11px] text-slate-500 font-medium">Delivered &amp; Approved</span>
+          <div class="text-xl font-black text-[#026047] dark:text-emerald-400 mt-1">${completedCount} Closed</div>
+          <div class="text-[10px] text-emerald-600 mt-1">Founder Sign-off Granted</div>
+        </div>
+      `;
+    }
+
+    if (aryanLeads.length === 0 && myDirectTasks.length === 0) {
+      container.innerHTML = `
+        <div class="p-12 text-center bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 space-y-3">
+          <div class="text-3xl">🎯</div>
+          <div class="text-sm font-bold text-slate-700 dark:text-slate-300">No Leads or Allocated Work Yet</div>
+          <p class="text-xs text-slate-400 max-w-md mx-auto">Create prospective client leads or allocate project deliverables to team members to track them here.</p>
+          <div>
+            <button onclick="openNewLeadModal()" class="px-4 py-2 rounded-xl bg-[#026047] hover:bg-[#024d39] text-[#fffde8] font-bold text-xs transition shadow-sm inline-flex items-center gap-1.5">
+              <span>+</span> Submit First Lead
+            </button>
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = aryanLeads
+      .map((lead) => {
+        let stageBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">Submitted to Founder</span>';
+        if (lead.status === 'allocated_to_vivek') {
+          stageBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">Allocated to Vivek (Tech)</span>';
+        } else if (lead.status === 'sent_to_arshad_notified_founder') {
+          stageBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">Tech Done • Commercial Check</span>';
+        } else if (lead.status === 'approved_for_delivery') {
+          stageBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">✓ Delivered &amp; Approved</span>';
+        }
+
+        return `
+        <div class="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3.5">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="px-2 py-0.5 rounded font-mono text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200">${escapeHtml(lead.leadNumber)}</span>
+              ${stageBadge}
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-[#fffde8] text-[#026047] border border-[#026047]/30">${escapeHtml(lead.productType)}</span>
+              <span class="text-[11px] text-slate-400">Created: ${formatDate(lead.submittedAt)}</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="font-black text-sm text-[#026047] dark:text-emerald-400">${formatINR(lead.dealValue)}</span>
+              <button onclick="openEditPricingModal('${lead.id}')" class="px-2 py-0.5 rounded text-[10px] font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 hover:border-emerald-500 text-slate-700 dark:text-slate-300 transition flex items-center gap-1 shadow-xs" title="Edit Lead Pricing">
+                <span>✏️</span> Edit Price
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <h4 class="font-bold text-sm text-slate-900 dark:text-white">${escapeHtml(lead.clientName)}</h4>
+            <div class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Contact Person: <span class="text-slate-700 dark:text-slate-300 font-medium">${escapeHtml(lead.contactPerson || 'Direct')}</span>
+              ${lead.phone ? ` • <span class="font-mono">${escapeHtml(lead.phone)}</span>` : ''}
+              ${lead.email ? ` • <span class="font-mono">${escapeHtml(lead.email)}</span>` : ''}
+            </div>
+          </div>
+
+          <div class="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 text-xs text-slate-700 dark:text-slate-300 space-y-1.5">
+            <div class="flex items-center justify-between text-[11px] text-slate-500 border-b border-slate-200/60 dark:border-slate-700/60 pb-1">
+              <span><strong>Work Allocation:</strong> ${lead.allocatedToName ? `<span class="font-bold text-blue-600 dark:text-blue-400">💻 ${escapeHtml(lead.allocatedToName)} (Technical Dept)</span>` : '<span class="text-slate-400">Awaiting Founder Technical Allocation</span>'}</span>
+              <span>Target Due: <strong class="text-slate-900 dark:text-white font-bold">${lead.dueDate ? formatDate(lead.dueDate) : 'Pending'}</strong></span>
+            </div>
+            <div class="text-[11px] leading-relaxed">
+              <span class="font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-[10px] block">Aryan's Scouted Scope:</span>
+              ${escapeHtml(lead.requirements)}
+            </div>
+            ${lead.founderInstructions ? `
+            <div class="text-[11px] pt-1 border-t border-slate-200/60 dark:border-slate-700/60 text-slate-600 dark:text-slate-400">
+              <span class="font-bold text-[#026047] dark:text-emerald-400">Founder Allocation Scope:</span> ${escapeHtml(lead.founderInstructions)}
+            </div>` : ''}
+          </div>
+
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 text-xs">
+            <div class="flex items-center gap-2 text-slate-500">
+              <span>Lead Scouted By:</span>
+              <span class="px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950 text-[#026047] dark:text-emerald-300 font-bold text-[11px]">🎯 Aryan Bhore (Research Lead)</span>
+            </div>
+            <div>
+              ${
+                lead.deliverableUrl
+                  ? `<a href="${escapeHtml(lead.deliverableUrl)}" target="_blank" class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition inline-flex items-center gap-1.5 shadow-sm">
+                      <span>🔗</span> View Technical Deliverable
+                    </a>`
+                  : lead.allocatedTo
+                  ? `<span class="px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-medium text-xs">💻 Work allocated to ${escapeHtml(lead.allocatedToName || 'Vivek')}</span>`
+                  : `<span class="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-medium text-xs">⏳ Awaiting Founder Allocation</span>`
+              }
+            </div>
+          </div>
+        </div>
+        `;
+      })
+      .join('');
+    return;
+  }
+
+  // NON-ARYAN (VIVEK, ARSHAD): Regular allocated work flow
+  if (badgeEl) badgeEl.textContent = 'My Tasks';
+  if (titleEl) titleEl.textContent = 'Allocated Work & Deliverables';
+  if (subtitleEl) subtitleEl.textContent = 'Tasks, milestones and project scopes assigned to you by Founder & Director Pranav Bansode.';
 
   if (sessionPill) {
     sessionPill.innerHTML = `
