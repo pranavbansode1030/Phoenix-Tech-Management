@@ -1165,18 +1165,19 @@ function updateRoleDisplay() {
       crownBadge.className = 'absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center text-[10px] font-bold shadow ring-1 ring-emerald-300';
     }
     if (desigBadge) {
-      desigBadge.innerHTML = '';
-      desigBadge.className = 'hidden';
+      desigBadge.innerHTML = 'RESEARCH LEAD';
+      desigBadge.className = 'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-[#fffde8]/20 text-[#fffde8] border border-[#fffde8]/40';
     }
     if (authBox) {
       authBox.innerHTML = '';
       authBox.className = 'hidden';
     }
-    if (currentRoleLabel) currentRoleLabel.innerHTML = '🎯 Aryan Bhore';
+    if (currentRoleLabel) currentRoleLabel.innerHTML = '🎯 Research Lead';
     if (topbarPill) {
       topbarPill.innerHTML = `
         <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
         <span class="font-extrabold text-emerald-700 dark:text-emerald-300">Aryan Bhore</span>
+        <span class="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-300/40">🎯 Research Lead</span>
       `;
     }
     if (btnCsv) btnCsv.classList.add('hidden');
@@ -2230,14 +2231,9 @@ function renderEmployeeDashboard(memberId) {
           <span class="w-2 h-2 rounded-full ${isArshad ? 'bg-blue-500' : (isAryan ? 'bg-emerald-500' : 'bg-purple-500')}"></span>
           <span class="text-slate-500 dark:text-slate-400">Authenticated Session:</span>
           <span class="font-extrabold text-slate-900 dark:text-white">${escapeHtml(mem.name)}</span>
-          ${
-            !isAryan
-              ? `
           <span class="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${badgeColorClass}">
             ${roleEmoji} ${escapeHtml(mem.designation)}
-          </span>`
-              : ''
-          }
+          </span>
         </div>
         <div class="text-[11px] text-slate-500 dark:text-slate-400">
           Private Individual Portfolio &bull; Company Executive Drawings Confidential
@@ -2252,20 +2248,11 @@ function renderEmployeeDashboard(memberId) {
               ${initials}
             </div>
             <div>
-              ${
-                !isAryan
-                  ? `
-              <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 mb-1">
+              <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${badgeColorClass} mb-1">
                 <span>${roleEmoji}</span> ${escapeHtml(mem.designation.toUpperCase())}
-              </div>`
-                  : ''
-              }
+              </div>
               <h2 class="text-xl font-black text-slate-900 dark:text-white">${escapeHtml(mem.name)}</h2>
-              ${
-                !isAryan
-                  ? `<p class="text-xs text-slate-500 dark:text-slate-400">Phoenix Tech Solutions Private Limited</p>`
-                  : ''
-              }
+              <p class="text-xs text-slate-500 dark:text-slate-400">Phoenix Tech Solutions Private Limited</p>
             </div>
           </div>
           ${
@@ -2283,14 +2270,10 @@ function renderEmployeeDashboard(memberId) {
       ${
         isAryan
           ? (() => {
-              const activeIncomeDeals = (STATE.income || []).filter(
-                (i) => i.status !== 'rejected' && matchesDateFilter(i.paymentDate)
-              );
-              const realTimeIncomeVal = activeIncomeDeals.reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
               const activeLeadDeals = (STATE.leads || []).filter((l) => l.status !== 'rejected');
-              const realTimeLeadsVal = activeLeadDeals.reduce((sum, l) => sum + (Number(l.dealValue) || 0), 0);
-              const realTimePipelineVal = realTimeIncomeVal > 0 ? realTimeIncomeVal : realTimeLeadsVal;
-              const realTimeTotalDeals = activeIncomeDeals.length > 0 ? activeIncomeDeals.length : activeLeadDeals.length;
+              const totalLeadPricing = activeLeadDeals.reduce((sum, l) => sum + (Number(l.dealValue) || 0), 0);
+              const totalTasksAssigned = (STATE.assignedTasks || []).length;
+              const inProgressTasks = (STATE.assignedTasks || []).filter((t) => t.status !== 'completed').length;
               const realTimeClosedVal = (STATE.income || [])
                 .filter((i) => i.status === 'received' && matchesDateFilter(i.paymentDate))
                 .reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
@@ -2299,9 +2282,16 @@ function renderEmployeeDashboard(memberId) {
       <!-- Aryan Deal & Lead Pipeline Metrics (Real-Time Live Calculation) -->
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div class="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
-          <span class="text-xs text-slate-400 font-medium">Active Client Deals</span>
-          <div class="text-xl font-bold text-slate-900 dark:text-white">${realTimeTotalDeals} Deals</div>
-          <div class="text-[11px] text-slate-500 pt-1">Live active client contract portfolio</div>
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-slate-400 font-medium">Active Deals &amp; Assigned Tasks</span>
+            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-[#026047] dark:bg-emerald-950 dark:text-emerald-300">
+              Connected
+            </span>
+          </div>
+          <div class="text-xl font-bold text-slate-900 dark:text-white">
+            ${activeLeadDeals.length} Active Deals <span class="text-sm font-semibold text-emerald-600 dark:text-emerald-400">(${totalTasksAssigned} Tasks Assigned)</span>
+          </div>
+          <div class="text-[11px] text-slate-500 pt-1">${totalTasksAssigned} total assigned tasks connected to ${activeLeadDeals.length} active client deals</div>
         </div>
 
         <div class="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
@@ -2312,9 +2302,9 @@ function renderEmployeeDashboard(memberId) {
             </span>
           </div>
           <div class="text-xl font-bold text-[#026047] dark:text-emerald-400">
-            ${formatINR(realTimePipelineVal)}
+            ${formatINR(totalLeadPricing)}
           </div>
-          <div class="text-[11px] text-slate-500 pt-1">Real-time aggregate valuation of all pipeline deals</div>
+          <div class="text-[11px] text-slate-500 pt-1">Real-time aggregate valuation of all lead pricing (${activeLeadDeals.length} active leads)</div>
         </div>
 
         <div class="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
