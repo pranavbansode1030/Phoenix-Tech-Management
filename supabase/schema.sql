@@ -283,6 +283,33 @@ CREATE TABLE IF NOT EXISTS public.audit_logs (
 );
 
 -- ------------------------------------------------------------------------------
+-- 11. CLIENT LEADS (Aryan Bhore / Research Lead Pipeline & Founder Allocation)
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.client_leads (
+    id TEXT PRIMARY KEY,
+    lead_number TEXT UNIQUE NOT NULL,
+    client_name TEXT NOT NULL,
+    contact_person TEXT,
+    phone TEXT,
+    product_type TEXT NOT NULL DEFAULT 'LeadX Platform',
+    deal_value NUMERIC(12, 2) NOT NULL DEFAULT 0.00 CHECK (deal_value >= 0),
+    requirements TEXT,
+    submitted_by TEXT NOT NULL DEFAULT 'Aryan Bhore',
+    submitted_by_id UUID REFERENCES public.team_members(id),
+    submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    status TEXT NOT NULL DEFAULT 'submitted_to_founder',
+    stage TEXT NOT NULL DEFAULT 'lead_created',
+    founder_instructions TEXT,
+    due_date DATE,
+    priority TEXT DEFAULT 'high',
+    allocated_to UUID REFERENCES public.team_members(id),
+    allocated_to_name TEXT,
+    allocated_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ------------------------------------------------------------------------------
 -- HELPER FUNCTIONS FOR USER LOGIN & AUTHORIZATION (IN public SCHEMA)
 -- ------------------------------------------------------------------------------
 
@@ -439,6 +466,7 @@ ALTER TABLE public.project_incentive_pools ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.member_incentive_allocations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.company_reserves ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.client_leads ENABLE ROW LEVEL SECURITY;
 
 -- 1. Profiles RLS
 DROP POLICY IF EXISTS "Profiles viewable by authenticated users" ON public.profiles;
@@ -614,11 +642,27 @@ CREATE POLICY "Authenticated users can insert audit logs"
     ON public.audit_logs FOR INSERT TO authenticated
     WITH CHECK (true);
 
+-- 13. Client Leads RLS
+DROP POLICY IF EXISTS "Client leads viewable by authenticated users" ON public.client_leads;
+CREATE POLICY "Client leads viewable by authenticated users"
+    ON public.client_leads FOR SELECT TO authenticated
+    USING (true);
+
+DROP POLICY IF EXISTS "Authenticated users can insert client leads" ON public.client_leads;
+CREATE POLICY "Authenticated users can insert client leads"
+    ON public.client_leads FOR INSERT TO authenticated
+    WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Authenticated users can update client leads" ON public.client_leads;
+CREATE POLICY "Authenticated users can update client leads"
+    ON public.client_leads FOR UPDATE TO authenticated
+    USING (true);
+
 -- ------------------------------------------------------------------------------
 -- INITIAL SEED DATA (Clean State - Using RFC 4122 UUID v4 with 4-digit identifiers)
 -- ------------------------------------------------------------------------------
 
--- 1. Core Team Members (PB-01, AS-02, VG-03)
+-- 1. Core Team Members (PB-01, AS-02, VG-03, AB-04)
 INSERT INTO public.team_members (id, member_code, name, role, designation, responsibilities, monthly_compensation, is_founder, joining_date)
 VALUES
 (
@@ -653,6 +697,17 @@ VALUES
     55000.00,
     FALSE,
     '2025-05-15'
+),
+(
+    '00000000-0000-4000-8000-000000000004',
+    'AB-04',
+    'Aryan Bhore',
+    'technical',
+    'Research Lead',
+    ARRAY['Finding potential client leads', 'Lead qualification', 'Updating portal with prospect requirements', 'Pipeline tracking'],
+    45000.00,
+    FALSE,
+    '2025-06-01'
 )
 ON CONFLICT (member_code) DO UPDATE SET
     name = EXCLUDED.name,

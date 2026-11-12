@@ -208,15 +208,197 @@ function loadAppStateFromStorage() {
 }
 
 function recordAuditLog(action, details, performedBy) {
-  STATE.auditLogs.unshift({
+  const newLog = {
     id: 'log-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
     action,
     details,
     performedBy,
     date: new Date().toISOString().replace('T', ' ').slice(0, 16)
-  });
+  };
+  STATE.auditLogs.unshift(newLog);
   if (STATE.auditLogs.length > 200) STATE.auditLogs.length = 200;
   saveAppStateToStorage();
+  syncAuditLogToSupabase(newLog);
+}
+
+function syncAuditLogToSupabase(log) {
+  const sb = getSupabaseClient();
+  if (!sb) return;
+  try {
+    sb.from('audit_logs')
+      .insert({
+        action: log.action || 'LOG_ENTRY',
+        entity: log.entity || 'erp_action',
+        entity_id: null,
+        performed_by: log.performedBy || 'System',
+        details: typeof log.details === 'object' ? log.details : { message: String(log.details || '') },
+      })
+      .then(({ error }) => {
+        if (error) console.warn('Supabase audit log sync note:', error.message);
+      })
+      .catch((err) => console.warn('Supabase audit log sync catch:', err));
+  } catch (e) {
+    console.warn('Supabase audit log exception:', e);
+  }
+}
+
+function syncLeadToSupabase(lead) {
+  if (!lead) return;
+  const sb = getSupabaseClient();
+  if (!sb) return;
+  try {
+    // 1. Permanently record lead synchronization in Supabase audit_logs
+    syncAuditLogToSupabase({
+      action: 'LEAD_' + String(lead.status || 'SYNC').toUpperCase(),
+      entity: 'client_lead',
+      performedBy: lead.submittedBy || 'Aryan Bhore (Research Lead)',
+      details: {
+        id: lead.id,
+        leadNumber: lead.leadNumber,
+        clientName: lead.clientName,
+        contactPerson: lead.contactPerson,
+        phone: lead.phone,
+        productType: lead.productType,
+        dealValue: lead.dealValue,
+        status: lead.status,
+        submittedAt: lead.submittedAt,
+        founderInstructions: lead.founderInstructions || null,
+        allocatedToName: lead.allocatedToName || null,
+      },
+    });
+
+    // 2. Also upsert to client_leads table if table is provisioned
+    sb.from('client_leads')
+      .upsert({
+        id: lead.id,
+        lead_number: lead.leadNumber || ('LEAD-' + lead.id),
+        client_name: lead.clientName,
+        contact_person: lead.contactPerson || '',
+        phone: lead.phone || '',
+        product_type: lead.productType || 'LeadX Platform',
+        deal_value: Number(lead.dealValue) || 0,
+        requirements: lead.requirements || '',
+        submitted_by: lead.submittedBy || 'Aryan Bhore',
+        submitted_at: lead.submittedAt || new Date().toISOString(),
+        status: lead.status || 'submitted_to_founder',
+        stage: lead.stage || 'lead_created',
+        founder_instructions: lead.founderInstructions || null,
+        due_date: lead.dueDate || null,
+        priority: lead.priority || 'high',
+        allocated_to_name: lead.allocatedToName || null,
+        allocated_at: lead.allocatedAt || null,
+      })
+      .then(({ error }) => {
+        if (error && !error.message.includes('schema cache')) {
+          console.warn('Supabase lead upsert note:', error.message);
+        }
+      })
+      .catch(() => {});
+  } catch (e) {
+    console.warn('Supabase lead sync exception:', e);
+  }
+}
+
+function syncAssignedTaskToSupabase(task) {
+  if (!task) return;
+  const sb = getSupabaseClient();
+  if (!sb) return;
+  try {
+    const targetMemberUuid = MEMBER_UUID_MAP[task.assignedTo] || '00000000-0000-4000-8000-000000000003';
+    const targetProjectUuid = PROJECT_UUID_MAP[task.projectId] || null;
+
+    sb.from('assigned_tasks')
+      .insert({
+        title: task.title,
+        description: task.description || '',
+        assigned_to: targetMemberUuid,
+        project_id: targetProjectUuid,
+        priority: task.priority || 'high',
+        status: task.status || 'assigned',
+        due_date: task.dueDate || null,
+      })
+      .select()
+      .single()
+      .then(({ data, error }) => {
+        if (error) {
+          console.warn('Supabase task insert note:', error.message);
+        } else if (data && data.id) {
+          task.id = data.id;
+          saveAssignedTasksToStorage();
+        }
+      })
+      .catch((err) => console.warn('Supabase task insert catch:', err));
+  } catch (e) {
+    console.warn('Supabase task sync exception:', e);
+  }
+}
+
+function syncIncomeToSupabase(inc) {
+  if (!inc) return;
+  const sb = getSupabaseClient();
+  if (!sb) return;
+  try {
+    const targetProjectUuid = inc.projectId && PROJECT_UUID_MAP[inc.projectId] ? PROJECT_UUID_MAP[inc.projectId] : null;
+    sb.from('income_records')
+      .insert({
+        source: inc.source || inc.clientName || 'Client Inflow',
+        client_name: inc.clientName || 'Client',
+        project_id: targetProjectUuid,
+        amount: Number(inc.amount) || 0,
+        gst_amount: Number(inc.gstAmount) || 0,
+        total_with_gst: (Number(inc.amount) || 0) + (Number(inc.gstAmount) || 0),
+        payment_date: inc.paymentDate || inc.date || new Date().toISOString().split('T')[0],
+        status: inc.status === 'received' ? 'received' : 'pending',
+        payment_method: inc.paymentMethod || 'bank_transfer',
+        invoice_no: inc.invoiceNo || null,
+        notes: inc.notes || inc.description || '',
+      })
+      .then(({ error }) => {
+        if (error) console.warn('Supabase income sync note:', error.message);
+      })
+      .catch(() => {});
+  } catch (e) {
+    console.warn('Supabase income sync exception:', e);
+  }
+}
+
+function syncExpenseToSupabase(exp) {
+  if (!exp) return;
+  const sb = getSupabaseClient();
+  if (!sb) return;
+  try {
+    const targetProjectUuid = exp.projectId && PROJECT_UUID_MAP[exp.projectId] ? PROJECT_UUID_MAP[exp.projectId] : null;
+    const catMap = {
+      marketing_business: 'marketing_business',
+      marketing: 'marketing_business',
+      technical_infrastructure: 'technical_infrastructure',
+      software_tools: 'software_tools',
+      team_compensation: 'team_compensation',
+      administrative: 'administrative',
+      direct_project_cost: 'direct_project_cost',
+    };
+    const validCat = catMap[exp.category] || 'other';
+
+    sb.from('expense_records')
+      .insert({
+        title: exp.title,
+        category: validCat,
+        project_id: targetProjectUuid,
+        amount: Number(exp.amount) || 0,
+        gst_amount: Number(exp.gstAmount) || 0,
+        total_payment: (Number(exp.amount) || 0) + (Number(exp.gstAmount) || 0),
+        date: exp.date || new Date().toISOString().split('T')[0],
+        paid_by: exp.paidBy || 'Team Member',
+        description: exp.description || '',
+        status: exp.status === 'approved' ? 'approved' : 'pending_approval',
+      })
+      .then(({ error }) => {
+        if (error) console.warn('Supabase expense sync note:', error.message);
+      })
+      .catch(() => {});
+  } catch (e) {
+    console.warn('Supabase expense sync exception:', e);
+  }
 }
 
 function saveAssignedTasksToStorage() {
@@ -768,7 +950,8 @@ function renderSidebarNav(activeTab) {
   const pendingExpensesCount = (STATE.expenses || []).filter((e) => e.status === 'pending_approval').length;
   const pendingPayoutsCount = (STATE.team || []).filter((m) => (m.pendingCompensation || 0) > 0).length;
   const pendingTasksCount = (STATE.assignedTasks || []).filter((t) => t.status === 'review_pending').length;
-  const totalPendingApprovals = pendingInflowsCount + pendingExpensesCount + pendingPayoutsCount + pendingTasksCount;
+  const pendingLeadsCount = (STATE.leads || []).filter((l) => l.status === 'submitted_to_founder').length;
+  const totalPendingApprovals = pendingInflowsCount + pendingExpensesCount + pendingPayoutsCount + pendingTasksCount + pendingLeadsCount;
 
   const currentMemberId = currentRole === 'arshad' ? 'mem-02' : (currentRole === 'aryan' ? 'mem-04' : 'mem-03');
   const myAssignedTasksCount = (STATE.assignedTasks || []).filter((t) => t.assignedTo === currentMemberId && t.status !== 'completed').length;
@@ -2601,7 +2784,7 @@ STATE.approvalFilter = 'ALL';
 
 function filterApprovals(category) {
   STATE.approvalFilter = category;
-  ['ALL', 'INCOME', 'EXPENSE', 'PAYOUT', 'TASK'].forEach((cat) => {
+  ['ALL', 'INCOME', 'EXPENSE', 'PAYOUT', 'TASK', 'LEAD'].forEach((cat) => {
     const btn = document.getElementById(`filter-appr-${cat}`);
     if (btn) {
       if (cat === category) {
@@ -2714,6 +2897,26 @@ function renderApprovals() {
     }
   });
 
+  // 5. Pending Client Leads (submitted by Aryan / Research Lead for Founder Allocation)
+  (STATE.leads || []).forEach((lead) => {
+    if (lead.status === 'submitted_to_founder') {
+      pendingItems.push({
+        type: 'LEAD',
+        rawType: 'lead',
+        id: lead.id,
+        title: lead.clientName,
+        purpose: `Lead ${lead.leadNumber || ''} • ${lead.productType || 'LeadX Platform'} (Price: ${formatINR(lead.dealValue)})`,
+        submittedBy: lead.submittedBy || 'Aryan Bhore',
+        project: lead.productType || 'LeadX Platform',
+        amount: Number(lead.dealValue) || 0,
+        scopeDisplay: formatINR(lead.dealValue),
+        date: lead.submittedAt ? lead.submittedAt.split('T')[0] : (lead.date || ''),
+        statusLabel: 'Awaiting Allocation',
+        badgeClass: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300',
+      });
+    }
+  });
+
   if (approveAllBtn) {
     const hasPending = pendingItems.length > 0;
     approveAllBtn.disabled = !hasPending;
@@ -2731,6 +2934,10 @@ function renderApprovals() {
       .filter((i) => i.type === 'EXPENSE' || i.type === 'PAYOUT')
       .reduce((sum, i) => sum + i.amount, 0);
     const pendingTaskCount = pendingItems.filter((i) => i.type === 'TASK').length;
+    const pendingLeadCount = pendingItems.filter((i) => i.type === 'LEAD').length;
+    const pendingLeadAmt = pendingItems
+      .filter((i) => i.type === 'LEAD')
+      .reduce((sum, i) => sum + i.amount, 0);
 
     metricsEl.innerHTML = `
       <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
@@ -2747,6 +2954,11 @@ function renderApprovals() {
         <span class="text-[11px] text-slate-500 font-medium">Pending Expenses &amp; Payouts</span>
         <div class="text-xl font-black text-rose-600 dark:text-rose-400 mt-1">${formatINR(pendingExpenseAmt)}</div>
         <div class="text-[10px] text-slate-400 mt-1">Outflow claims awaiting review</div>
+      </div>
+      <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <span class="text-[11px] text-slate-500 font-medium">Pending Client Leads</span>
+        <div class="text-xl font-black text-emerald-600 dark:text-emerald-400 mt-1">${pendingLeadCount} Leads</div>
+        <div class="text-[10px] text-emerald-500 mt-1">${formatINR(pendingLeadAmt)} to allocate</div>
       </div>
       <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
         <span class="text-[11px] text-slate-500 font-medium">Pending Work Deliverables</span>
@@ -2799,13 +3011,13 @@ function renderApprovals() {
         </td>
         <td class="py-3 px-3 text-right whitespace-nowrap">
           <div class="inline-flex items-center gap-1.5">
-            <button onclick="approveApprovalItem('${rType}', '${itemId}')"
+            <button onclick="${item.rawType === 'lead' ? `openAllocateLeadModal('${itemId}')` : `approveApprovalItem('${rType}', '${itemId}')`}"
               class="px-2.5 py-1 rounded-lg bg-[#026047] hover:bg-[#024d39] text-[#fffde8] font-bold text-[11px] transition inline-flex items-center gap-1 shadow-sm">
-              <span>👑</span> Approve
+              <span>👑</span> ${item.rawType === 'lead' ? 'Allocate to Tech' : 'Approve'}
             </button>
             <button onclick="rejectApprovalItem('${rType}', '${itemId}')"
               class="px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 font-bold text-[11px] transition inline-flex items-center"
-              title="${item.rawType === 'task' ? 'Return to In Progress' : 'Reject Request'}">
+              title="${item.rawType === 'task' ? 'Return to In Progress' : (item.rawType === 'lead' ? 'Reject Lead' : 'Reject Request')}">
               ${item.rawType === 'task' ? '↺ Return' : '✕ Reject'}
             </button>
           </div>
@@ -2837,6 +3049,11 @@ function completeTaskRecord(task) {
 function approveApprovalItem(type, id) {
   if (!requireFounder('sign off approvals')) return;
 
+  if (type === 'lead') {
+    openAllocateLeadModal(id);
+    return;
+  }
+
   if (type === 'income') {
     const item = (STATE.income || []).find((i) => i.id === id);
     if (!item || item.status === 'received') return;
@@ -2855,6 +3072,7 @@ function approveApprovalItem(type, id) {
       'Pranav Bansode (Founder / Director)'
     );
     saveAppStateToStorage();
+    syncIncomeToSupabase(item);
     showToast(`Approved: ${item.clientName} inflow of ${formatINR(item.amount)} verified!`);
   } else if (type === 'expense') {
     const item = (STATE.expenses || []).find((e) => e.id === id);
@@ -2875,6 +3093,7 @@ function approveApprovalItem(type, id) {
       'Pranav Bansode (Founder / Director)'
     );
     saveAppStateToStorage();
+    syncExpenseToSupabase(item);
     showToast(`Approved: Expense ${formatINR(item.amount)} approved!`);
   } else if (type === 'payout') {
     if (typeof window.recordCompensationPayout === 'function') {
@@ -2948,6 +3167,19 @@ function rejectApprovalItem(type, id) {
     );
     saveAppStateToStorage();
     showToast(`Returned "${task.title}" to ${task.assignedToName} for revisions.`);
+  } else if (type === 'lead') {
+    const lead = (STATE.leads || []).find((l) => l.id === id);
+    if (!lead || lead.status !== 'submitted_to_founder') return;
+    lead.status = 'rejected';
+    saveLeadsToStorage();
+    syncLeadToSupabase(lead);
+    recordAuditLog(
+      'LEAD_REJECTED',
+      `Founder rejected lead "${lead.clientName}" (${formatINR(lead.dealValue)}) submitted by ${lead.submittedBy || 'Aryan Bhore'}`,
+      'Pranav Bansode (Founder / Director)'
+    );
+    saveAppStateToStorage();
+    showToast(`Lead "${lead.clientName}" marked as rejected.`);
   }
 
   renderApprovals();
@@ -3980,6 +4212,7 @@ window.saveEditedLeadPricing = function () {
     getCurrentUserName()
   );
   saveAppStateToStorage();
+  syncLeadToSupabase(lead);
   closeEditPricingModal();
   showToast(`✓ Pricing updated to ${formatINR(newPrice)} for "${lead.clientName}"!`);
   renderCurrentTab();
@@ -4027,6 +4260,7 @@ window.submitClientLead = function () {
     newLead.submittedBy
   );
   saveAppStateToStorage();
+  syncLeadToSupabase(newLead);
 
   closeNewLeadModal();
   const form = document.querySelector('#modal-new-lead form');
@@ -4120,6 +4354,8 @@ window.confirmAllocateLeadToVivek = function () {
     'Pranav Bansode (Founder / Director)'
   );
   saveAppStateToStorage();
+  syncLeadToSupabase(lead);
+  syncAssignedTaskToSupabase(newTask);
 
   if (instrEl) instrEl.value = '';
   closeAllocateLeadModal();
@@ -4194,6 +4430,15 @@ window.confirmTechForward = function () {
   if (linkedTask) {
     linkedTask.status = 'review_pending';
     saveAssignedTasksToStorage();
+    const sb = getSupabaseClient();
+    if (sb && linkedTask.id && linkedTask.id.includes('-') && !linkedTask.id.startsWith('task-')) {
+      sb.from('assigned_tasks')
+        .update({ status: 'review_pending' })
+        .eq('id', linkedTask.id)
+        .then(({ error }) => {
+          if (error) console.warn('Supabase task forward sync note:', error.message);
+        });
+    }
   }
 
   saveLeadsToStorage();
@@ -4203,6 +4448,7 @@ window.confirmTechForward = function () {
     MEMBER_NAME_MAP[getCurrentMemberId()] || 'Vivek Gajdhane (Technical Dept)'
   );
   saveAppStateToStorage();
+  syncLeadToSupabase(lead);
 
   if (urlEl) urlEl.value = '';
   if (notesEl) notesEl.value = '';
@@ -4293,9 +4539,7 @@ window.confirmDeliveryApproval = function () {
 
   const linkedTask = (STATE.assignedTasks || []).find((t) => t.leadId === lead.id);
   if (linkedTask) {
-    linkedTask.status = 'completed';
-    linkedTask.completedDate = new Date().toISOString().split('T')[0];
-    linkedTask.approvedBy = 'Pranav Bansode (Founder)';
+    completeTaskRecord(linkedTask);
     saveAssignedTasksToStorage();
   }
 
@@ -4303,7 +4547,7 @@ window.confirmDeliveryApproval = function () {
   const existsIncome = (STATE.income || []).some((i) => i.leadId === lead.id);
   if (!existsIncome && Number(lead.dealValue) > 0) {
     const dealAmt = Number(lead.dealValue) || 0;
-    STATE.income.unshift({
+    const newInc = {
       id: 'inc-deal-' + Date.now(),
       leadId: lead.id,
       source: 'Client Inflow',
@@ -4319,7 +4563,9 @@ window.confirmDeliveryApproval = function () {
       approvedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
       invoiceNumber: 'INV-2026-' + String((STATE.income || []).length + 101),
       notes: founderNotes || `Project delivery finalized & approved for client ${lead.clientName}`,
-    });
+    };
+    STATE.income.unshift(newInc);
+    syncIncomeToSupabase(newInc);
 
     const prj = (STATE.projects || []).find((p) => p.id === projectId);
     if (prj) prj.revenueReceived = (prj.revenueReceived || 0) + dealAmt;
@@ -4332,6 +4578,7 @@ window.confirmDeliveryApproval = function () {
     'Pranav Bansode (Founder / Director)'
   );
   saveAppStateToStorage();
+  syncLeadToSupabase(lead);
 
   if (founderNotesEl) founderNotesEl.value = '';
   closeDeliveryApprovalModal();
@@ -5452,7 +5699,7 @@ window.submitNewIncome = function () {
   const prjObj = (STATE.projects || []).find((p) => p.id === project) || (STATE.projects || [])[0];
   const enrolledBy = MEMBER_NAME_MAP[getCurrentMemberId()] || 'Team Member';
 
-  STATE.income.unshift({
+  const newInc = {
     id: 'inc-' + Date.now(),
     source: 'Client Inflow',
     projectId: prjObj ? prjObj.id : 'prj-leadx',
@@ -5464,7 +5711,9 @@ window.submitNewIncome = function () {
     paymentMethod: method,
     createdBy: enrolledBy,
     notes: `Enrolled by ${enrolledBy}. Awaiting Founder/Director approval.`,
-  });
+  };
+  STATE.income.unshift(newInc);
+  syncIncomeToSupabase(newInc);
 
   recordAuditLog(
     'ENROLL_INCOME',
@@ -5840,7 +6089,7 @@ window.submitNewExpense = function () {
 
   const isAutoApproved = STATE.activeRole === 'pranav';
 
-  STATE.expenses.unshift({
+  const newExp = {
     id: 'exp-' + Date.now(),
     title,
     category,
@@ -5852,7 +6101,9 @@ window.submitNewExpense = function () {
     description: desc || 'Company operational expense.',
     status: isAutoApproved ? 'approved' : 'pending_approval',
     approvedBy: isAutoApproved ? 'Pranav Bansode (Founder / Director)' : null,
-  });
+  };
+  STATE.expenses.unshift(newExp);
+  syncExpenseToSupabase(newExp);
 
   if (isAutoApproved && prjObj) {
     prjObj.directExpenses = (prjObj.directExpenses || 0) + amount;

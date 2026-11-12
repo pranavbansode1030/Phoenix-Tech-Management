@@ -56,7 +56,7 @@ VALUES
     '00000000-0000-4000-8000-000000000004',
     'AB-04',
     'Aryan Bhore',
-    'lead_acquisition',
+    'technical',
     'Research Lead',
     ARRAY['Finding potential client leads', 'Lead qualification', 'Updating portal with prospect requirements', 'Pipeline tracking'],
     45000.00,
@@ -115,7 +115,7 @@ VALUES
     'Aryan Bhore',
     'aryan@phoenixtech.com',
     '4004',
-    'lead_acquisition',
+    'technical',
     'Research Lead',
     'active'
 )
@@ -280,4 +280,59 @@ ON CONFLICT (type) DO UPDATE SET
     description = EXCLUDED.description,
     target_amount = EXCLUDED.target_amount,
     monthly_allocation = EXCLUDED.monthly_allocation;
+
+-- ------------------------------------------------------------------------------
+-- 7. CLIENT LEADS (Aryan Bhore / Research Lead Pipeline & Founder Allocation)
+-- ------------------------------------------------------------------------------
+INSERT INTO public.client_leads (
+    id,
+    lead_number,
+    client_name,
+    contact_person,
+    phone,
+    product_type,
+    deal_value,
+    requirements,
+    submitted_by,
+    submitted_by_id,
+    submitted_at,
+    status,
+    stage
+)
+VALUES
+(
+    'lead-seed-001',
+    'LEAD-2026-001',
+    'Apex Logistics India',
+    'Rajesh Verma',
+    '+91 98201 12345',
+    'LeadX Platform',
+    4999.00,
+    'Real-time automated WhatsApp qualification bot and CRM integration for transport logistics.',
+    'Aryan Bhore',
+    '00000000-0000-4000-8000-000000000004',
+    '2026-11-10T10:00:00Z',
+    'submitted_to_founder',
+    'lead_created'
+),
+(
+    'lead-seed-002',
+    'LEAD-2026-002',
+    'Dr. Kulkarni Dental Clinic',
+    'Dr. Sneha Kulkarni',
+    '+91 98450 67890',
+    'Smart Review Management',
+    4999.00,
+    'Google Business Profile NFC smart review tap stand and automated 5-star filter review portal.',
+    'Aryan Bhore',
+    '00000000-0000-4000-8000-000000000004',
+    '2026-11-11T14:30:00Z',
+    'submitted_to_founder',
+    'lead_created'
+)
+ON CONFLICT (id) DO UPDATE SET
+    client_name = EXCLUDED.client_name,
+    deal_value = EXCLUDED.deal_value,
+    status = EXCLUDED.status;
+
 
