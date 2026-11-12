@@ -202,6 +202,24 @@ function loadAppStateFromStorage() {
         }
       });
     }
+    if (Array.isArray(STATE.leads)) {
+      STATE.leads = STATE.leads.filter(
+        (l) =>
+          l.id !== 'lead-01' &&
+          l.id !== 'lead-02' &&
+          !/apex health/i.test(l.clientName || '') &&
+          !/metropolis gym/i.test(l.clientName || '')
+      );
+    }
+    if (Array.isArray(STATE.assignedTasks)) {
+      STATE.assignedTasks = STATE.assignedTasks.filter(
+        (t) =>
+          t.leadId !== 'lead-01' &&
+          t.leadId !== 'lead-02' &&
+          !/apex health/i.test(t.title || '') &&
+          !/metropolis gym/i.test(t.title || '')
+      );
+    }
   } catch (e) {
     console.warn('App state load error:', e);
   }
@@ -422,14 +440,24 @@ function loadLeadsFromStorage() {
     const raw = localStorage.getItem('phoenix_leads_pipeline');
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.map(normalizeLead);
+      if (Array.isArray(parsed)) {
+        const filtered = parsed.filter(
+          (l) =>
+            l.id !== 'lead-01' &&
+            l.id !== 'lead-02' &&
+            !/apex health/i.test(l.clientName || '') &&
+            !/metropolis gym/i.test(l.clientName || '')
+        );
+        try {
+          localStorage.setItem('phoenix_leads_pipeline', JSON.stringify(filtered));
+        } catch (_) {}
+        return filtered.map(normalizeLead);
       }
     }
   } catch (e) {
     console.warn('Leads storage load error:', e);
   }
-  return null;
+  return [];
 }
 
 function loadAssignedTasksFromStorage() {
@@ -437,8 +465,17 @@ function loadAssignedTasksFromStorage() {
     const stored = localStorage.getItem('phoenix_assigned_tasks');
     if (stored) {
       const parsed = JSON.parse(stored);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        STATE.assignedTasks = parsed;
+      if (Array.isArray(parsed)) {
+        STATE.assignedTasks = parsed.filter(
+          (t) =>
+            t.leadId !== 'lead-01' &&
+            t.leadId !== 'lead-02' &&
+            !/apex health/i.test(t.title || '') &&
+            !/metropolis gym/i.test(t.title || '')
+        );
+        try {
+          localStorage.setItem('phoenix_assigned_tasks', JSON.stringify(STATE.assignedTasks));
+        } catch (_) {}
       }
     }
   } catch (e) {
@@ -600,63 +637,7 @@ const STATE = {
   // Step 2: Pranav allocates to Vivek (Tech)
   // Step 3: Vivek completes tech -> sends to Arshad (Notifies Founder Pranav)
   // Step 4: Founder Pranav finalizes & approves for delivery
-  leads: loadLeadsFromStorage() || [
-    {
-      id: 'lead-01',
-      leadNumber: 'LEAD-2026-001',
-      clientName: 'Apex Health Clinic Chain',
-      contactPerson: 'Dr. Ramesh Kulkarni',
-      phone: '+91 98220 11223',
-      email: 'ramesh@apexhealth.in',
-      productType: 'Smart Review Management',
-      dealValue: 125000,
-      requirements: 'Automated Google review interception funnel for 3 dental branches, QR standees, WhatsApp sentiment routing.',
-      source: 'Direct Business Outreach',
-      submittedBy: 'Aryan Bhore',
-      submittedByMemberId: 'mem-04',
-      submittedAt: '2026-11-09',
-      status: 'allocated_to_vivek',
-      stage: 'allocated_to_vivek',
-      founderInstructions: 'Vivek, please set up the review interceptor backend, database schema and QR redirect links by Friday.',
-      dueDate: '2026-11-16',
-      priority: 'high',
-      allocatedTo: 'mem-03',
-      allocatedToName: 'Vivek Gajdhane',
-      allocatedAt: '2026-11-09',
-      techNotes: '',
-      deliverableUrl: '',
-      techCompletedAt: null,
-      arshadChecked: false,
-      approvedAt: null
-    },
-    {
-      id: 'lead-02',
-      leadNumber: 'LEAD-2026-002',
-      clientName: 'Metropolis Gym & Fitness',
-      contactPerson: 'Vikram Shinde',
-      phone: '+91 99700 44556',
-      email: 'vikram@metropolisgym.com',
-      productType: 'LeadX',
-      dealValue: 85000,
-      requirements: 'B2B automated lead capture engine for corporate annual gym memberships & WhatsApp lead followups.',
-      source: 'B2B Cold Prospecting',
-      submittedBy: 'Aryan Bhore',
-      submittedByMemberId: 'mem-04',
-      submittedAt: '2026-11-09',
-      status: 'submitted_to_founder',
-      stage: 'submitted_to_founder',
-      founderInstructions: '',
-      dueDate: '',
-      priority: 'high',
-      allocatedTo: null,
-      allocatedAt: null,
-      techNotes: '',
-      deliverableUrl: '',
-      techCompletedAt: null,
-      arshadChecked: false,
-      approvedAt: null
-    }
-  ],
+  leads: loadLeadsFromStorage(),
 
   // 2. Initial Projects (Strictly LeadX & Smart Review Management)
   projects: [
