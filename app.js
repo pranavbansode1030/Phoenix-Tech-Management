@@ -2793,6 +2793,9 @@ function renderEmployeeDashboard(memberId) {
                   <button onclick="openEditPricingModal('${lead.id}')" class="px-2 py-0.5 rounded text-[10px] font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 hover:border-emerald-500 text-slate-700 dark:text-slate-300 transition flex items-center gap-1 shadow-xs" title="Edit Lead Pricing">
                     <span>✏️</span> Edit Price
                   </button>
+                  <button onclick="deleteLead('${lead.id}')" class="px-2 py-0.5 rounded text-[10px] font-bold bg-white dark:bg-slate-900 border border-rose-200 dark:border-rose-900/60 hover:bg-rose-50 hover:border-rose-500 text-rose-600 dark:text-rose-400 transition flex items-center gap-1 shadow-xs" title="Delete Lead from Portal & Database">
+                    <span>🗑️</span> Delete
+                  </button>
                 </div>
               </div>
 
@@ -3154,6 +3157,11 @@ function renderApprovals() {
               class="px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 font-bold text-[11px] transition inline-flex items-center"
               title="${item.rawType === 'task' ? 'Return to In Progress' : (item.rawType === 'lead' || item.rawType === 'lead_market' ? 'Reject Lead' : 'Reject Request')}">
               ${item.rawType === 'task' ? '↺ Return' : '✕ Reject'}
+            </button>
+            <button onclick="deleteApprovalItem('${rType}', '${itemId}')"
+              class="px-2 py-1 rounded-lg bg-slate-100 hover:bg-rose-100 text-slate-500 hover:text-rose-700 dark:bg-slate-800 dark:hover:bg-rose-950 font-bold text-[11px] transition inline-flex items-center gap-1"
+              title="Permanently Delete from Portal &amp; Database">
+              <span>🗑️</span> Delete
             </button>
           </div>
         </td>
@@ -3721,39 +3729,49 @@ function submitAssignTask() {
 }
 window.submitAssignTask = submitAssignTask;
 
+function isUuidString(str) {
+  return typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+}
+
 function deleteAssignedTask(id) {
-  if (!requireFounder('remove delegated tasks')) return;
-  if (!confirm('Are you sure you want to permanently delete this task? It will be removed from the portal and database.')) return;
+  if (!requireAuth('delete delegated tasks')) return;
   const task = (STATE.assignedTasks || []).find((t) => t.id === id);
+  if (!confirm(`Are you sure you want to permanently delete task "${task ? task.title : id}"?\nIt will be permanently removed from the portal and database.`)) return;
+
   STATE.assignedTasks = (STATE.assignedTasks || []).filter((t) => t.id !== id);
   saveAssignedTasksToStorage();
 
   const sb = getSupabaseClient();
-  if (sb && id) {
-    sb.from('assigned_tasks').delete().eq('id', id).then(({ error }) => {
-      if (error) console.warn('Supabase task delete note:', error.message);
-    }).catch(() => {});
+  if (sb) {
+    if (id && isUuidString(id)) {
+      sb.from('assigned_tasks').delete().eq('id', id).catch(() => {});
+    }
+    if (task && task.title) {
+      sb.from('assigned_tasks').delete().eq('title', task.title).catch(() => {});
+    }
   }
 
   saveAppStateToStorage();
+  const actor = MEMBER_NAME_MAP[getCurrentMemberId()] || (STATE.activeRole === 'pranav' ? 'Pranav Bansode (Founder)' : 'Authenticated User');
   recordAuditLog(
     'TASK_DELETED',
-    `Founder permanently deleted task "${task ? task.title : id}".`,
-    'Pranav Bansode (Founder / Director)'
+    `User permanently deleted task "${task ? task.title : id}".`,
+    actor
   );
   renderAssignProjects();
   if (STATE.currentTab === 'allocated-work') renderAllocatedWork();
+  if (STATE.currentTab === 'approvals') renderApprovals();
   renderSidebarNav(STATE.currentTab);
   showToast('Task permanently removed from portal and database.');
 }
 window.deleteAssignedTask = deleteAssignedTask;
 
 window.deleteLead = function (leadId) {
-  if (!requireFounder('delete leads')) return;
+  if (!requireAuth('delete leads')) return;
   const lead = (STATE.leads || []).find((l) => l.id === leadId);
   if (!lead) return;
 
-  if (!confirm(`Are you sure you want to permanently delete lead "${lead.clientName}"?\nIt will be removed from the portal and database.`)) {
+  if (!confirm(`Are you sure you want to permanently delete lead "${lead.clientName}"?\nIt will be permanently removed from the portal and database.`)) {
     return;
   }
 
@@ -3762,44 +3780,65 @@ window.deleteLead = function (leadId) {
   saveLeadsToStorage();
 
   // 2. Remove any linked assigned task
-  const linkedTask = (STATE.assignedTasks || []).find((t) => t.leadId === leadId);
-  if (linkedTask) {
+  const linkedTasks = (STATE.assignedTasks || []).filter((t) => t.leadId === leadId);
+  if (linkedTasks.length > 0) {
     STATE.assignedTasks = (STATE.assignedTasks || []).filter((t) => t.leadId !== leadId);
     saveAssignedTasksToStorage();
     const sb = getSupabaseClient();
-    if (sb && linkedTask.id) {
-      sb.from('assigned_tasks').delete().eq('id', linkedTask.id).catch(() => {});
+    if (sb) {
+      linkedTasks.forEach((t) => {
+        if (t.id && isUuidString(t.id)) sb.from('assigned_tasks').delete().eq('id', t.id).catch(() => {});
+        if (t.title) sb.from('assigned_tasks').delete().eq('title', t.title).catch(() => {});
+      });
     }
   }
 
   // 3. Delete from Supabase client_leads table
   const sb = getSupabaseClient();
-  if (sb && leadId) {
-    sb.from('client_leads').delete().eq('id', leadId).then(({ error }) => {
-      if (error) console.warn('Supabase lead delete note:', error.message);
-    }).catch(() => {});
+  if (sb) {
+    if (leadId) {
+      sb.from('client_leads').delete().eq('id', leadId).then(({ error }) => {
+        if (error) console.warn('Supabase lead delete note:', error.message);
+      }).catch(() => {});
+    }
+    if (lead.leadNumber) {
+      sb.from('client_leads').delete().eq('lead_number', lead.leadNumber).catch(() => {});
+    }
+    if (lead.clientName) {
+      sb.from('client_leads').delete().eq('client_name', lead.clientName).catch(() => {});
+    }
   }
 
-  // 4. Audit log & UI refresh
+  // 4. Remove linked notifications
+  if (Array.isArray(STATE.notifications)) {
+    STATE.notifications = STATE.notifications.filter((n) => n.leadId !== leadId);
+    saveNotificationsToStorage();
+    renderNotificationBell();
+  }
+
+  // 5. Audit log & UI refresh
   saveAppStateToStorage();
+  const actor = MEMBER_NAME_MAP[getCurrentMemberId()] || (STATE.activeRole === 'pranav' ? 'Pranav Bansode (Founder)' : 'Authenticated User');
   recordAuditLog(
     'LEAD_DELETED',
-    `Founder permanently deleted lead "${lead.clientName}" (${formatINR(lead.dealValue)}).`,
-    'Pranav Bansode (Founder / Director)'
+    `User permanently deleted lead "${lead.clientName}" (${formatINR(lead.dealValue)}).`,
+    actor
   );
 
   showToast(`🗑️ Lead "${lead.clientName}" permanently deleted from portal and database.`);
   renderCurrentTab();
+  if (STATE.activeRole === 'aryan' || STATE.currentTab === 'employee-dashboard') renderEmployeeDashboard(getCurrentMemberId());
+  if (STATE.currentTab === 'allocated-work') renderAllocatedWork();
   if (STATE.currentTab === 'approvals') renderApprovals();
   renderSidebarNav(STATE.currentTab);
 };
 
 window.deleteIncome = function (id) {
-  if (!requireFounder('permanently delete income records')) return;
+  if (!requireAuth('delete income records')) return;
   const inc = (STATE.income || []).find((i) => i.id === id);
   if (!inc) return;
 
-  if (!confirm(`Are you sure you want to permanently delete income record for "${inc.clientName || inc.source}" (${formatINR(inc.amount)})?\nIt will be removed from the portal and database.`)) {
+  if (!confirm(`Are you sure you want to permanently delete income record for "${inc.clientName || inc.source}" (${formatINR(inc.amount)})?\nIt will be permanently removed from the portal and database.`)) {
     return;
   }
 
@@ -3807,14 +3846,23 @@ window.deleteIncome = function (id) {
   saveAppStateToStorage();
 
   const sb = getSupabaseClient();
-  if (sb && id) {
-    sb.from('income_records').delete().eq('id', id).catch(() => {});
+  if (sb) {
+    if (id && isUuidString(id)) {
+      sb.from('income_records').delete().eq('id', id).catch(() => {});
+    }
+    if (inc.clientName) {
+      sb.from('income_records').delete().eq('client_name', inc.clientName).catch(() => {});
+    }
+    if (inc.invoiceNumber) {
+      sb.from('income_records').delete().eq('invoice_no', inc.invoiceNumber).catch(() => {});
+    }
   }
 
+  const actor = MEMBER_NAME_MAP[getCurrentMemberId()] || (STATE.activeRole === 'pranav' ? 'Pranav Bansode (Founder)' : 'Authenticated User');
   recordAuditLog(
     'INCOME_DELETED',
-    `Founder permanently deleted income entry of ${formatINR(inc.amount)} for ${inc.clientName || inc.source}.`,
-    'Pranav Bansode (Founder / Director)'
+    `User permanently deleted income entry of ${formatINR(inc.amount)} for ${inc.clientName || inc.source}.`,
+    actor
   );
 
   showToast(`🗑️ Income record permanently removed from portal and database.`);
@@ -3826,11 +3874,11 @@ window.deleteIncome = function (id) {
 };
 
 window.deleteExpense = function (id) {
-  if (!requireFounder('permanently delete expense records')) return;
+  if (!requireAuth('delete expense records')) return;
   const exp = (STATE.expenses || []).find((e) => e.id === id);
   if (!exp) return;
 
-  if (!confirm(`Are you sure you want to permanently delete expense "${exp.title}" (${formatINR(exp.amount)})?\nIt will be removed from the portal and database.`)) {
+  if (!confirm(`Are you sure you want to permanently delete expense "${exp.title}" (${formatINR(exp.amount)})?\nIt will be permanently removed from the portal and database.`)) {
     return;
   }
 
@@ -3838,14 +3886,20 @@ window.deleteExpense = function (id) {
   saveAppStateToStorage();
 
   const sb = getSupabaseClient();
-  if (sb && id) {
-    sb.from('expense_records').delete().eq('id', id).catch(() => {});
+  if (sb) {
+    if (id && isUuidString(id)) {
+      sb.from('expense_records').delete().eq('id', id).catch(() => {});
+    }
+    if (exp.title) {
+      sb.from('expense_records').delete().eq('title', exp.title).catch(() => {});
+    }
   }
 
+  const actor = MEMBER_NAME_MAP[getCurrentMemberId()] || (STATE.activeRole === 'pranav' ? 'Pranav Bansode (Founder)' : 'Authenticated User');
   recordAuditLog(
     'EXPENSE_DELETED',
-    `Founder permanently deleted expense entry of ${formatINR(exp.amount)} for ${exp.title}.`,
-    'Pranav Bansode (Founder / Director)'
+    `User permanently deleted expense entry of ${formatINR(exp.amount)} for ${exp.title}.`,
+    actor
   );
 
   showToast(`🗑️ Expense record permanently removed from portal and database.`);
@@ -3853,6 +3907,20 @@ window.deleteExpense = function (id) {
   renderExpenses();
   if (STATE.currentTab === 'approvals') renderApprovals();
   renderSidebarNav(STATE.currentTab);
+};
+
+window.deleteApprovalItem = function (type, id) {
+  if (type === 'lead' || type === 'lead_market') {
+    window.deleteLead(id);
+  } else if (type === 'task') {
+    deleteAssignedTask(id);
+  } else if (type === 'income') {
+    window.deleteIncome(id);
+  } else if (type === 'expense') {
+    window.deleteExpense(id);
+  } else {
+    window.deleteLead(id);
+  }
 };
 
 // ==============================================================================
@@ -3985,6 +4053,7 @@ function renderAllocatedWork() {
                     <div class="flex items-center gap-2">
                       ${histBadge}
                       <span class="text-[9px] text-slate-400 font-mono">${formatDate(l.submittedAt)}</span>
+                      <button onclick="deleteLead('${l.id}')" class="p-1 text-slate-400 hover:text-rose-600 text-xs transition" title="Delete Lead Permanently">🗑️</button>
                     </div>
                   </div>
                 `;
@@ -4028,6 +4097,9 @@ function renderAllocatedWork() {
               <span class="font-black text-sm text-[#026047] dark:text-emerald-400">${formatINR(lead.dealValue)}</span>
               <button onclick="openEditPricingModal('${lead.id}')" class="px-2 py-0.5 rounded text-[10px] font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 hover:border-emerald-500 text-slate-700 dark:text-slate-300 transition flex items-center gap-1 shadow-xs" title="Edit Lead Pricing">
                 <span>✏️</span> Edit Price
+              </button>
+              <button onclick="deleteLead('${lead.id}')" class="px-2 py-0.5 rounded text-[10px] font-bold bg-white dark:bg-slate-900 border border-rose-200 dark:border-rose-900/60 hover:bg-rose-50 hover:border-rose-500 text-rose-600 dark:text-rose-400 transition flex items-center gap-1 shadow-xs" title="Delete Lead from Portal & Database">
+                <span>🗑️</span> Delete
               </button>
             </div>
           </div>
@@ -4111,6 +4183,7 @@ function renderAllocatedWork() {
                   <div class="flex items-center gap-2 shrink-0">
                     ${histBadge}
                     <span class="text-[9px] text-slate-400 font-mono">${formatDate(l.submittedAt)}</span>
+                    <button onclick="deleteLead('${l.id}')" class="p-1 text-slate-400 hover:text-rose-600 text-xs transition" title="Delete Lead Permanently">🗑️</button>
                   </div>
                 </div>
               `;
@@ -4281,8 +4354,11 @@ function renderAllocatedWork() {
               <span>Delegated By:</span>
               <span class="px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950 text-[#026047] dark:text-emerald-300 font-bold text-[11px]">👑 Pranav Bansode (Founder)</span>
             </div>
-            <div>
+            <div class="flex items-center gap-2">
               ${actionControl}
+              <button onclick="deleteAssignedTask('${tId}')" class="p-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-rose-300 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition" title="Delete Task from Portal &amp; Database">
+                🗑️
+              </button>
             </div>
           </div>
         </div>
@@ -5589,6 +5665,10 @@ function renderSalesDone() {
                                 </button>`
                               : `<span class="text-[10px] text-slate-400 italic">Pending</span>`
                           }
+                          <button onclick="deleteIncome('${sId}')"
+                            class="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-rose-300 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition" title="Delete Sale from Portal &amp; Database">
+                            🗑️
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -6649,7 +6729,13 @@ function renderExpenseManagement() {
           statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300">↺ Reversed</span>`;
         }
 
-        let actionCell = `<span class="text-amber-600 dark:text-amber-400 text-[11px] font-medium">Pending Founder Sign-off</span>`;
+        const deleteExpBtn = `
+          <button onclick="deleteExpense('${expId}')" class="p-1 rounded text-slate-400 hover:text-rose-600 transition" title="Delete Expense from Portal &amp; Database">
+            🗑️
+          </button>
+        `;
+
+        let actionCell = `<div class="flex items-center justify-end gap-1.5"><span class="text-amber-600 dark:text-amber-400 text-[11px] font-medium">Pending Sign-off</span>${deleteExpBtn}</div>`;
         if (currentRole === 'pranav') {
           if (exp.status === 'approved') {
             actionCell = `
@@ -6658,6 +6744,7 @@ function renderExpenseManagement() {
                 <button onclick="reverseExpense('${expId}')" class="px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 hover:bg-rose-100 dark:hover:bg-rose-950 text-slate-600 hover:text-rose-700 text-[10px] font-bold transition" title="Reverse this expense with audit reason">
                   Reverse
                 </button>
+                ${deleteExpBtn}
               </div>`;
           } else if (exp.status === 'pending_approval') {
             actionCell = `
@@ -6668,16 +6755,17 @@ function renderExpenseManagement() {
                 <button onclick="rejectExpense('${expId}')" class="px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 text-xs font-bold transition">
                   ✕ Reject
                 </button>
+                ${deleteExpBtn}
               </div>`;
           } else {
-            actionCell = `<span class="text-[11px] text-slate-400 italic">${exp.status === 'rejected' ? 'Rejected' : 'Reversed'}</span>`;
+            actionCell = `<div class="flex items-center justify-end gap-1.5"><span class="text-[11px] text-slate-400 italic">${exp.status === 'rejected' ? 'Rejected' : 'Reversed'}</span>${deleteExpBtn}</div>`;
           }
         } else if (exp.status === 'approved') {
-          actionCell = `<span class="text-emerald-600 dark:text-emerald-400 font-semibold text-[11px]">✓ Approved by Founder Pranav</span>`;
+          actionCell = `<div class="flex items-center justify-end gap-1.5"><span class="text-emerald-600 dark:text-emerald-400 font-semibold text-[11px]">✓ Approved</span>${deleteExpBtn}</div>`;
         } else if (exp.status === 'rejected') {
-          actionCell = `<span class="text-rose-600 dark:text-rose-400 text-[11px] font-medium">✕ Rejected by Founder</span>`;
+          actionCell = `<div class="flex items-center justify-end gap-1.5"><span class="text-rose-600 dark:text-rose-400 text-[11px] font-medium">✕ Rejected</span>${deleteExpBtn}</div>`;
         } else if (exp.status === 'reversed') {
-          actionCell = `<span class="text-slate-500 text-[11px] font-medium">↺ Entry Reversed</span>`;
+          actionCell = `<div class="flex items-center justify-end gap-1.5"><span class="text-slate-500 text-[11px] font-medium">↺ Entry Reversed</span>${deleteExpBtn}</div>`;
         }
 
         return `
