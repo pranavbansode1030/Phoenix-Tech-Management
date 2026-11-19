@@ -10,8 +10,8 @@
 
   // Default configuration (can be overridden by setting window.PHOENIX_SUPABASE_CONFIG before this script)
   const config = window.PHOENIX_SUPABASE_CONFIG || {
-    url: '',      // e.g., 'https://your-project.supabase.co'
-    anonKey: ''   // e.g., 'eyJhbGciOiJIUzI1Ni...'
+    url: 'https://mvdknbfisgrwewljqnxw.supabase.co',
+    anonKey: 'sb_publishable_W_QNdDR7wpYjgmZJQ_Bjsw_iS3TxZPA'
   };
 
   let client = null;

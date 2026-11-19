@@ -17,6 +17,7 @@
 // SUPABASE CLIENT & LIVE DATABASE SYNC
 // ==============================================================================
 const PHOENIX_SUPABASE_URL = 'https://mvdknbfisgrwewljqnxw.supabase.co';
+const PHOENIX_SUPABASE_KEY = 'sb_publishable_W_QNdDR7wpYjgmZJQ_Bjsw_iS3TxZPA';
 const PHOENIX_SUPABASE_ANON = 'sb_publishable_W_QNdDR7wpYjgmZJQ_Bjsw_iS3TxZPA';
 const APP_STATE_STORAGE_KEY = 'phoenix_erp_state_v1';
 
@@ -26,9 +27,37 @@ function getSupabaseClient() {
     if (c) return c;
   }
   if (typeof window.supabase !== 'undefined' && typeof window.supabase.createClient === 'function') {
-    return window.supabase.createClient(PHOENIX_SUPABASE_URL, PHOENIX_SUPABASE_ANON);
+    return window.supabase.createClient(PHOENIX_SUPABASE_URL, PHOENIX_SUPABASE_KEY);
   }
   return null;
+}
+
+async function deleteFromSupabase(table, filterCol, filterVal) {
+  if (!filterVal) return;
+  const sb = getSupabaseClient();
+  if (!sb) return;
+  try {
+    const { error } = await sb.from(table).delete().eq(filterCol, filterVal);
+    if (error && !error.message.includes('schema cache')) {
+      console.warn(`[Supabase Delete Note] ${table}.${filterCol}=${filterVal}:`, error.message);
+    }
+  } catch (err) {
+    console.warn(`[Supabase Delete Exception] ${table}.${filterCol}=${filterVal}:`, err);
+  }
+}
+
+async function deleteFromSupabaseLike(table, filterCol, pattern) {
+  if (!pattern) return;
+  const sb = getSupabaseClient();
+  if (!sb) return;
+  try {
+    const { error } = await sb.from(table).delete().ilike(filterCol, pattern);
+    if (error && !error.message.includes('schema cache')) {
+      console.warn(`[Supabase DeleteLike Note] ${table}.${filterCol} ilike ${pattern}:`, error.message);
+    }
+  } catch (err) {
+    console.warn(`[Supabase DeleteLike Exception] ${table}.${filterCol}:`, err);
+  }
 }
 
 const MEMBER_UUID_MAP = {
@@ -124,8 +153,8 @@ function requireAuth(actionDesc = 'perform this action') {
 
 function requireFounder(actionDesc = 'perform this executive action') {
   if (!requireAuth(actionDesc)) return false;
-  if (STATE.activeRole !== 'pranav') {
-    showToast(`Security Gate: Only Founder & Director Pranav Bansode can ${actionDesc}.`);
+  if (STATE.activeRole !== 'pranav' && STATE.activeRole !== 'arshad') {
+    showToast(`Security Gate: Only Executive Leadership (Founder Pranav or Co-Founder & CTO Arshad) can ${actionDesc}.`);
     return false;
   }
   return true;
@@ -453,6 +482,131 @@ function saveLeadsToStorage() {
 }
 
 // ==============================================================================
+// IPHONE / IOS NOTIFICATION SOUND & POPUP SYSTEM (Web Audio API Synthesizer)
+// ==============================================================================
+let _iosAudioCtx = null;
+
+function getIPhoneAudioContext() {
+  if (!_iosAudioCtx) {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (AudioContext) {
+      _iosAudioCtx = new AudioContext();
+    }
+  }
+  if (_iosAudioCtx && _iosAudioCtx.state === 'suspended') {
+    _iosAudioCtx.resume().catch(() => {});
+  }
+  return _iosAudioCtx;
+}
+
+// Unlock audio context on user interaction
+window.addEventListener('click', function unlockAudio() {
+  getIPhoneAudioContext();
+  window.removeEventListener('click', unlockAudio);
+}, { once: true });
+
+function playIPhoneNotificationSound() {
+  try {
+    const ctx = getIPhoneAudioContext();
+    if (!ctx) return;
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+
+    const now = ctx.currentTime;
+    // Authentic iPhone Tri-tone chime: G#5 (830.61 Hz), C6 (1046.50 Hz), E6 (1318.51 Hz)
+    const tones = [
+      { freq: 830.61, start: now + 0.00, dur: 0.09, gain: 0.28 },
+      { freq: 1046.50, start: now + 0.09, dur: 0.09, gain: 0.32 },
+      { freq: 1318.51, start: now + 0.18, dur: 0.35, gain: 0.36 }
+    ];
+
+    tones.forEach((tone) => {
+      const osc = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(tone.freq, tone.start);
+
+      // Smooth attack and natural iOS chime exponential decay
+      gainNode.gain.setValueAtTime(0.001, tone.start);
+      gainNode.gain.exponentialRampToValueAtTime(tone.gain, tone.start + 0.015);
+      gainNode.gain.exponentialRampToValueAtTime(0.0001, tone.start + tone.dur);
+
+      osc.connect(gainNode);
+      gainNode.connect(ctx.destination);
+
+      osc.start(tone.start);
+      osc.stop(tone.start + tone.dur);
+    });
+  } catch (err) {
+    console.debug('Audio chime playback omitted:', err);
+  }
+}
+window.playIPhoneNotificationSound = playIPhoneNotificationSound;
+
+function showIPhoneNotificationPopup({ title, message, type = 'info', actor = '' }) {
+  // Play authentic iPhone chime
+  playIPhoneNotificationSound();
+
+  // Create floating iOS Dynamic Island style banner
+  const containerId = 'iphone-notification-banner-container';
+  let container = document.getElementById(containerId);
+  if (!container) {
+    container = document.createElement('div');
+    container.id = containerId;
+    container.className = 'fixed top-4 left-1/2 -translate-x-1/2 z-[99999] pointer-events-none flex flex-col items-center gap-2 w-full max-w-md px-4';
+    document.body.appendChild(container);
+  }
+
+  const card = document.createElement('div');
+  card.className = 'pointer-events-auto w-full rounded-2xl bg-slate-900/95 dark:bg-slate-900/95 text-white backdrop-blur-xl border border-white/15 shadow-[0_20px_50px_rgba(0,0,0,0.45)] p-3.5 transform transition-all duration-300 -translate-y-4 opacity-0 scale-95 cursor-pointer hover:bg-slate-900 select-none';
+
+  const typeEmoji = type === 'lead' ? '🎯' : type === 'task' ? '📋' : type === 'approval' ? '👑' : type === 'payout' ? '💳' : '🔔';
+
+  card.innerHTML = `
+    <div class="flex items-center justify-between text-[11px] text-slate-400 mb-1">
+      <div class="flex items-center gap-1.5">
+        <span class="w-4 h-4 rounded-full bg-[#026047] text-[#fffde8] flex items-center justify-center text-[9px] font-black">PT</span>
+        <span class="font-extrabold tracking-wider text-slate-300 uppercase text-[10px]">PHOENIX PORTAL</span>
+        ${actor ? `&bull; <span class="text-slate-400 font-medium">${escapeHtml(actor)}</span>` : ''}
+      </div>
+      <span class="font-medium text-[10px] text-slate-400">now</span>
+    </div>
+    <div class="flex items-start gap-2.5">
+      <span class="text-lg shrink-0 mt-0.5">${typeEmoji}</span>
+      <div class="min-w-0 flex-1">
+        <h4 class="text-xs font-bold text-white truncate leading-tight">${escapeHtml(title)}</h4>
+        <p class="text-[11px] text-slate-300 mt-0.5 leading-snug line-clamp-2">${escapeHtml(message)}</p>
+      </div>
+    </div>
+  `;
+
+  // Tap to dismiss
+  card.onclick = () => {
+    card.classList.add('-translate-y-4', 'opacity-0', 'scale-95');
+    setTimeout(() => card.remove(), 250);
+  };
+
+  container.appendChild(card);
+
+  // Trigger smooth slide down with bounce
+  requestAnimationFrame(() => {
+    card.classList.remove('-translate-y-4', 'opacity-0', 'scale-95');
+    card.classList.add('translate-y-0', 'opacity-100', 'scale-100');
+  });
+
+  // Auto-dismiss after 4.5 seconds
+  setTimeout(() => {
+    if (card.parentNode) {
+      card.classList.add('-translate-y-4', 'opacity-0', 'scale-95');
+      setTimeout(() => card.remove(), 250);
+    }
+  }, 4500);
+}
+window.showIPhoneNotificationPopup = showIPhoneNotificationPopup;
+
+// ==============================================================================
 // REAL-TIME WORKFLOW NOTIFICATIONS (BELL DROPDOWN & REAL-TIME ALERTS)
 // ==============================================================================
 function loadNotificationsFromStorage() {
@@ -507,10 +661,10 @@ function createNotification({ type, title, message, targetRole = 'all', leadId =
   saveNotificationsToStorage();
 
   const active = STATE.activeRole;
-  // Point 1 & 3: Notify founder & co-founder, excluding the actor who performed the action
+  // Notify founder & co-founder, excluding the actor who performed the action
   const isRelevant = isNotificationTarget(targetRole, active) && (!callerRole || active !== callerRole);
   if (isRelevant) {
-    showToast(`${title}: ${message}`);
+    showIPhoneNotificationPopup({ title, message, type, actor });
   }
 
   recordAuditLog(
@@ -521,6 +675,7 @@ function createNotification({ type, title, message, targetRole = 'all', leadId =
 
   renderNotificationBell();
 }
+
 window.createNotification = createNotification;
 
 function renderNotificationBell() {
@@ -677,7 +832,30 @@ async function syncTasksFromSupabase() {
     }
 
     if (data && data.length > 0) {
-      STATE.assignedTasks = data.map((row) => {
+      let tombstone = [];
+      try {
+        tombstone = JSON.parse(localStorage.getItem('phoenix_deleted_tasks') || '[]');
+      } catch (e) { tombstone = []; }
+      const deletedSet = new Set(tombstone);
+
+      // Clean up orphaned deleted tasks in Supabase
+      const toDeleteFromRemote = data.filter((row) =>
+        deletedSet.has(row.id) ||
+        deletedSet.has(row.title) ||
+        /apex health/i.test(row.title || '') ||
+        /metropolis gym/i.test(row.title || '')
+      );
+      toDeleteFromRemote.forEach(async (row) => {
+        await sb.from('assigned_tasks').delete().eq('id', row.id).catch(() => {});
+      });
+
+      const activeRows = data.filter((row) =>
+        !deletedSet.has(row.id) &&
+        !deletedSet.has(row.title) &&
+        !/apex health/i.test(row.title || '') &&
+        !/metropolis gym/i.test(row.title || '')
+      );
+      STATE.assignedTasks = activeRows.map((row) => {
         const mappedMember = UUID_MEMBER_MAP[row.assigned_to] || 'mem-02';
         const mappedProject = UUID_PROJECT_MAP[row.project_id] || 'general';
         const prj = STATE.projects.find((p) => p.id === mappedProject);
@@ -760,12 +938,12 @@ const STATE = {
       id: 'mem-02',
       name: 'Arshad Shaikh',
       role: 'co_founder',
-      designation: 'Co-Founder',
+      designation: 'Co-Founder & CTO',
       responsibilities: [
-        'Scheduling meetings',
-        'Marketing management',
-        'Business idea research',
-        'Digital business planning'
+        'Chief Technology Officer oversight',
+        'Lead review, approvals & tech allocation',
+        'Commercial deals & client sales',
+        'Technical architecture review'
       ],
       monthlyCompensation: 15000,
       pendingCompensation: 0,
@@ -817,16 +995,34 @@ const STATE = {
   leads: loadLeadsFromStorage(),
   notifications: loadNotificationsFromStorage(),
 
-  // 2. Initial Projects (Strictly LeadX & Smart Review Management)
+  // 2. Initial Projects (Live in-progress initiatives & completed products)
   projects: [
+    {
+      id: 'prj-godownpro',
+      code: 'PRP-GodownPro',
+      name: 'GodownPro',
+      description: 'Inventory warehouse automation & B2B stock tracking engine.',
+      status: 'active',
+      revenueReceived: 0,
+      directExpenses: 0,
+      allocatedOverhead: 0,
+      incentivePercentage: 10.0,
+      assignedMembers: ['mem-01', 'mem-02', 'mem-03'],
+      membersAllocation: [
+        { memberId: 'mem-01', name: 'Pranav Bansode', share: 30.0 },
+        { memberId: 'mem-02', name: 'Arshad Shaikh', share: 40.0 },
+        { memberId: 'mem-03', name: 'Vivek Gajdhane', share: 30.0 },
+      ],
+      createdAt: '2026-09-01',
+    },
     {
       id: 'prj-leadx',
       code: 'PRJ-LEADX',
       name: 'LeadX',
       description: 'B2B client acquisition, automated lead capture and outreach pipeline platform.',
-      status: 'active',
-      revenueReceived: 0,
-      directExpenses: 0,
+      status: 'completed',
+      revenueReceived: 185000,
+      directExpenses: 22000,
       allocatedOverhead: 0,
       incentivePercentage: 10.0,
       assignedMembers: ['mem-01', 'mem-02', 'mem-03'],
@@ -842,9 +1038,9 @@ const STATE = {
       code: 'PRJ-SRM',
       name: 'Smart Review Management',
       description: 'Customer sentiment intelligence and private feedback interception funnel.',
-      status: 'active',
-      revenueReceived: 0,
-      directExpenses: 0,
+      status: 'completed',
+      revenueReceived: 95000,
+      directExpenses: 14000,
       allocatedOverhead: 0,
       incentivePercentage: 10.0,
       assignedMembers: ['mem-01', 'mem-02', 'mem-03'],
@@ -1080,19 +1276,1500 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-function setupTheme() {
-  if (STATE.theme === 'dark') {
+// ==============================================================================
+// USER-ISOLATED PROFILE, PREFERENCE & COLOR THEME SYSTEM
+// Any user changes (theme, portfolio focus, private notes, date filters)
+// are strictly limited to their own profile and completely invisible to others.
+// ==============================================================================
+
+function getUserTheme(role) {
+  const r = role || STATE.activeRole || 'pranav';
+  try {
+    const saved = localStorage.getItem(`phoenix_theme_${r}`);
+    if (saved === 'dark' || saved === 'light') return saved;
+  } catch (_) {}
+  // Default to clean light mode for every user
+  return 'light';
+}
+
+function setUserTheme(role, theme) {
+  const r = role || STATE.activeRole || 'pranav';
+  try {
+    localStorage.setItem(`phoenix_theme_${r}`, theme);
+  } catch (_) {}
+  if (!STATE.activeRole || STATE.activeRole === r) {
+    STATE.theme = theme;
+  }
+}
+
+function applyThemeForUser(role) {
+  const r = role || STATE.activeRole || 'pranav';
+  const theme = getUserTheme(r);
+  STATE.theme = theme;
+  if (theme === 'dark') {
     document.documentElement.classList.add('dark');
   } else {
     document.documentElement.classList.remove('dark');
   }
+  return theme;
+}
+
+function setupTheme() {
+  if (STATE.isAuthenticated && STATE.activeRole) {
+    applyThemeForUser(STATE.activeRole);
+  } else {
+    // Keep login screen neutral light
+    document.documentElement.classList.remove('dark');
+    STATE.theme = 'light';
+  }
 }
 
 window.toggleTheme = function () {
-  STATE.theme = STATE.theme === 'dark' ? 'light' : 'dark';
-  localStorage.setItem('phoenix_theme', STATE.theme);
-  setupTheme();
+  const currentRole = STATE.activeRole || 'pranav';
+  const currentTheme = getUserTheme(currentRole);
+  const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+  setUserTheme(currentRole, newTheme);
+  applyThemeForUser(currentRole);
+  const userName = (MEMBER_CREDENTIALS[currentRole] && MEMBER_CREDENTIALS[currentRole].name) ? MEMBER_CREDENTIALS[currentRole].name : currentRole;
+  showToast(`Color theme set to ${newTheme} mode for ${userName}'s profile only.`);
 };
+
+function getUserDateFilter(role) {
+  const r = role || STATE.activeRole || 'pranav';
+  try {
+    const val = localStorage.getItem(`phoenix_date_filter_${r}`);
+    if (val) return val;
+  } catch (_) {}
+  return 'current_month';
+}
+
+function setUserDateFilter(role, filterVal) {
+  const r = role || STATE.activeRole || 'pranav';
+  try {
+    localStorage.setItem(`phoenix_date_filter_${r}`, filterVal);
+  } catch (_) {}
+  STATE.dateFilter = filterVal;
+}
+
+function getUserProfile(role) {
+  const r = role || STATE.activeRole || 'pranav';
+  try {
+    const saved = localStorage.getItem(`phoenix_profile_${r}`);
+    if (saved) return JSON.parse(saved);
+  } catch (_) {}
+  return {};
+}
+
+function saveUserProfile(role, data) {
+  const r = role || STATE.activeRole || 'pranav';
+  try {
+    const current = getUserProfile(r);
+    const merged = { ...current, ...data };
+    localStorage.setItem(`phoenix_profile_${r}`, JSON.stringify(merged));
+    return merged;
+  } catch (_) {}
+  return data;
+}
+
+window.openPortfolioSettingsModal = function () {
+  const role = STATE.activeRole || 'pranav';
+  const modal = document.getElementById('modal-user-portfolio-settings');
+  if (!modal) return;
+
+  const currentTheme = getUserTheme(role);
+  const lightRadio = document.getElementById('theme-pref-light');
+  const darkRadio = document.getElementById('theme-pref-dark');
+  if (lightRadio && darkRadio) {
+    if (currentTheme === 'dark') {
+      darkRadio.checked = true;
+    } else {
+      lightRadio.checked = true;
+    }
+  }
+
+  const profileData = getEmployeeProfile(role);
+  const bioInput = document.getElementById('user-profile-bio');
+  const notesInput = document.getElementById('user-profile-notes');
+  if (bioInput) bioInput.value = profileData.bio || '';
+  if (notesInput) notesInput.value = profileData.notes || '';
+
+  const emailInput = document.getElementById('user-profile-email');
+  const phoneInput = document.getElementById('user-profile-phone');
+  const panInput = document.getElementById('user-profile-pan');
+  const bankNameInput = document.getElementById('user-profile-bank-name');
+  const bankAccountInput = document.getElementById('user-profile-bank-account');
+  const ifscInput = document.getElementById('user-profile-ifsc');
+
+  if (emailInput) emailInput.value = profileData.email || '';
+  if (phoneInput) phoneInput.value = profileData.phone || '';
+  if (panInput) panInput.value = profileData.pan || '';
+  if (bankNameInput) bankNameInput.value = profileData.bankName || '';
+  if (bankAccountInput) bankAccountInput.value = profileData.bankAccount || '';
+  if (ifscInput) ifscInput.value = profileData.ifsc || '';
+
+  modal.classList.remove('hidden');
+};
+
+window.closePortfolioSettingsModal = function () {
+  const modal = document.getElementById('modal-user-portfolio-settings');
+  if (modal) modal.classList.add('hidden');
+};
+
+window.submitPortfolioSettings = function () {
+  const role = STATE.activeRole || 'pranav';
+  const darkRadio = document.getElementById('theme-pref-dark');
+  const chosenTheme = darkRadio && darkRadio.checked ? 'dark' : 'light';
+  setUserTheme(role, chosenTheme);
+  applyThemeForUser(role);
+
+  const bioInput = document.getElementById('user-profile-bio');
+  const notesInput = document.getElementById('user-profile-notes');
+  const bio = bioInput ? bioInput.value.trim() : '';
+  const notes = notesInput ? notesInput.value.trim() : '';
+
+  const emailInput = document.getElementById('user-profile-email');
+  const phoneInput = document.getElementById('user-profile-phone');
+  const panInput = document.getElementById('user-profile-pan');
+  const bankNameInput = document.getElementById('user-profile-bank-name');
+  const bankAccountInput = document.getElementById('user-profile-bank-account');
+  const ifscInput = document.getElementById('user-profile-ifsc');
+
+  const email = emailInput ? emailInput.value.trim() : '';
+  const phone = phoneInput ? phoneInput.value.trim() : '';
+  const pan = panInput ? panInput.value.trim().toUpperCase() : '';
+  const bankName = bankNameInput ? bankNameInput.value.trim() : '';
+  const bankAccount = bankAccountInput ? bankAccountInput.value.trim() : '';
+  const ifsc = ifscInput ? ifscInput.value.trim().toUpperCase() : '';
+
+  saveUserProfile(role, { bio, notes, email, phone, pan, bankName, bankAccount, ifsc });
+
+  closePortfolioSettingsModal();
+  const userName = (MEMBER_CREDENTIALS[role] && MEMBER_CREDENTIALS[role].name) ? MEMBER_CREDENTIALS[role].name : role;
+  showToast(`Settings updated! Credentials & details saved strictly for ${userName}.`);
+  if (STATE.currentTab === 'employee-dashboard') {
+    renderEmployeeDashboard(getCurrentMemberId());
+  } else if (STATE.currentTab === 'my-profile') {
+    renderMyProfileTab();
+  } else {
+    renderCurrentTab();
+  }
+};
+
+// ==============================================================================
+// EMPLOYEE OFFICIAL DOCUMENTS & "MY PROFILE" SYSTEM
+// Joining Date, Salary Slips, Offer Letter, Company Policies, Emp ID & Credentials
+// Blank initial credentials (Email, Phone, PAN, Bank Details) with self-editing
+// ==============================================================================
+
+const EMPLOYEE_PROFILE_DOCS = {
+  pranav: {
+    empId: 'PB-01',
+    name: 'Pranav Bansode',
+    role: 'pranav',
+    designation: 'Founder & Director',
+    department: 'Executive Governance & Sole Direction',
+    joiningDate: '01 January 2026',
+    confirmationDate: '01 January 2026',
+    email: '',
+    phone: '',
+    pan: '',
+    bankName: '',
+    bankAccount: '',
+    ifsc: '',
+    salaryModel: 'Executive Equity & Drawings (Non-Salaried Sole Signatory)',
+    monthlySalary: 0,
+    basicSalary: 0,
+    hra: 0,
+    specialAllowance: 0,
+    professionalTax: 0,
+    netMonthly: 0,
+    offerLetterRef: 'PTS/DIR/2026/001'
+  },
+  arshad: {
+    empId: 'AS-02',
+    name: 'Arshad Shaikh',
+    role: 'arshad',
+    designation: 'Co-Founder & CTO',
+    department: 'Executive Technical & Commercial Architecture',
+    joiningDate: '15 January 2026',
+    confirmationDate: '15 April 2026',
+    email: '',
+    phone: '',
+    pan: '',
+    bankName: '',
+    bankAccount: '',
+    ifsc: '',
+    salaryModel: 'Fixed Retainer + Deal Sourcing Pool',
+    monthlySalary: 15000,
+    basicSalary: 7500,
+    hra: 4500,
+    specialAllowance: 3000,
+    professionalTax: 200,
+    netMonthly: 14800,
+    offerLetterRef: 'PTS/HR/2026/OFF-02'
+  },
+  vivek: {
+    empId: 'VG-03',
+    name: 'Vivek Gajdhane',
+    role: 'vivek',
+    designation: 'Technical Department Lead',
+    department: 'Technical Department',
+    joiningDate: '01 February 2026',
+    confirmationDate: '01 May 2026',
+    email: '',
+    phone: '',
+    pan: '',
+    bankName: '',
+    bankAccount: '',
+    ifsc: '',
+    salaryModel: 'Fixed Technical Retainer + Incentive Pool',
+    monthlySalary: 10000,
+    basicSalary: 5000,
+    hra: 3000,
+    specialAllowance: 2000,
+    professionalTax: 200,
+    netMonthly: 9800,
+    offerLetterRef: 'PTS/HR/2026/OFF-03'
+  },
+  aryan: {
+    empId: 'AB-04',
+    name: 'Aryan Bhore',
+    role: 'aryan',
+    designation: 'Research Lead',
+    department: 'Research & Scouting Department',
+    joiningDate: '15 February 2026',
+    confirmationDate: '15 May 2026',
+    email: '',
+    phone: '',
+    pan: '',
+    bankName: '',
+    bankAccount: '',
+    ifsc: '',
+    salaryModel: 'Fixed Research Retainer + Deal Commission',
+    monthlySalary: 12000,
+    basicSalary: 6000,
+    hra: 3600,
+    specialAllowance: 2400,
+    professionalTax: 200,
+    netMonthly: 11800,
+    offerLetterRef: 'PTS/HR/2026/OFF-04'
+  }
+};
+
+function getEmployeeProfile(roleOrId) {
+  let r = roleOrId || STATE.activeRole || 'pranav';
+  if (r === 'mem-01' || r === 'pb-01') r = 'pranav';
+  else if (r === 'mem-02' || r === 'as-02') r = 'arshad';
+  else if (r === 'mem-03' || r === 'vg-03') r = 'vivek';
+  else if (r === 'mem-04' || r === 'ab-04') r = 'aryan';
+  const base = EMPLOYEE_PROFILE_DOCS[r] || EMPLOYEE_PROFILE_DOCS.pranav;
+  const userSaved = getUserProfile(r);
+  return { ...base, ...userSaved };
+}
+window.getEmployeeProfile = getEmployeeProfile;
+
+function numberToWordsINR(num) {
+  const n = Math.floor(Number(num) || 0);
+  if (n <= 0) return 'Zero Rupees Only';
+  const units = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+  function convertTwoDigits(val) {
+    if (val < 20) return units[val];
+    const t = Math.floor(val / 10);
+    const u = val % 10;
+    return tens[t] + (u ? ' ' + units[u] : '');
+  }
+
+  function convertThreeDigits(val) {
+    let str = '';
+    const h = Math.floor(val / 100);
+    const rest = val % 100;
+    if (h) str += units[h] + ' Hundred';
+    if (rest) str += (str ? ' and ' : '') + convertTwoDigits(rest);
+    return str;
+  }
+
+  const crore = Math.floor(n / 10000000);
+  let rem = n % 10000000;
+  const lakh = Math.floor(rem / 100000);
+  rem = rem % 100000;
+  const thousand = Math.floor(rem / 1000);
+  rem = rem % 1000;
+  const hundreds = rem;
+
+  let words = '';
+  if (crore) words += convertThreeDigits(crore) + ' Crore ';
+  if (lakh) words += convertThreeDigits(lakh) + ' Lakh ';
+  if (thousand) words += convertThreeDigits(thousand) + ' Thousand ';
+  if (hundreds) words += convertThreeDigits(hundreds);
+  return words.trim() + ' Rupees Only';
+}
+
+window.printElementContent = function (elementId) {
+  const el = document.getElementById(elementId);
+  if (!el) return;
+  const printWindow = window.open('', '_blank', 'width=900,height=750');
+  if (!printWindow) {
+    window.print();
+    return;
+  }
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Phoenix Tech Solutions - Official Corporate Document</title>
+        <script src="https://cdn.tailwindcss.com"><\/script>
+        <style>
+          @media print {
+            body { padding: 0; background: white !important; color: black !important; }
+            @page { margin: 1.5cm; }
+          }
+        </style>
+      </head>
+      <body class="bg-white p-8 font-sans text-slate-900">
+        ${el.innerHTML}
+      </body>
+    </html>
+  `);
+  printWindow.document.close();
+  printWindow.focus();
+  setTimeout(() => {
+    printWindow.print();
+  }, 400);
+};
+
+// Legacy route helper for Employee Workspace vs Profile
+window.switchEmployeeSubView = function (subView) {
+  switchTab(subView === 'profile' ? 'my-profile' : 'employee-dashboard');
+};
+
+window.openOfferLetterModal = function (role) {
+  const targetRole = role || STATE.activeRole || 'pranav';
+  const profile = getEmployeeProfile(targetRole);
+  const modal = document.getElementById('modal-offer-letter');
+  const body = document.getElementById('offer-letter-print-body');
+  if (!modal || !body) return;
+
+  const isDirector = targetRole === 'pranav';
+
+  body.innerHTML = `
+    <!-- Company Letterhead Header -->
+    <div class="border-b-2 border-[#026047] pb-4 flex items-start justify-between">
+      <div>
+        <div class="flex items-center gap-2.5">
+          <img src="logo-emerald-transparent.png" class="h-9 w-9 object-contain shrink-0" onerror="this.src='logo-black-transparent.png'" alt="Phoenix Tech" />
+          <span class="text-base font-black text-[#026047] uppercase tracking-wider">Phoenix Tech Solutions Pvt. Ltd.</span>
+        </div>
+        <p class="text-[10px] text-slate-500 mt-1 leading-tight">
+          CIN: U72900PN2026PTC123456 &bull; Reg. Office: 11-B, Lane No, opposite Etasha Society, Bharat Colony, Sayad Nagar, Hadapsar, Pune, Maharashtra 411028<br/>
+          Email: contact@phoenixtech.com &bull; Corporate Portal: portal.phoenixtech.com
+        </p>
+      </div>
+      <div class="text-right">
+        <span class="px-2 py-0.5 rounded bg-emerald-50 text-[#026047] font-mono text-[10px] font-bold border border-emerald-200">
+          REF: ${escapeHtml(profile.offerLetterRef)}
+        </span>
+        <div class="text-[10px] text-slate-500 mt-1">Issue Date: <strong>${escapeHtml(profile.joiningDate)}</strong></div>
+      </div>
+    </div>
+
+    <!-- Letter Subject & Salutation -->
+    <div class="space-y-3 pt-2">
+      <div>
+        <div class="text-[11px] text-slate-500">To:</div>
+        <div class="font-extrabold text-sm text-slate-900">${escapeHtml(profile.name)}</div>
+        <div class="text-[11px] text-slate-600">Employee Code: <strong class="font-mono">${escapeHtml(profile.empId)}</strong> &bull; PAN: <span class="font-mono">${escapeHtml(profile.pan)}</span></div>
+        <div class="text-[11px] text-slate-600">${escapeHtml(profile.email)}</div>
+      </div>
+
+      <div class="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-xs font-bold text-slate-900">
+        Subject: ${isDirector ? 'Executive Charter of Directorship & Founding Authority' : `Formal Letter of Appointment - ${escapeHtml(profile.designation)}`}
+      </div>
+
+      <p class="leading-relaxed">
+        Dear <strong>${escapeHtml(profile.name)}</strong>,
+      </p>
+
+      <p class="leading-relaxed">
+        ${isDirector
+          ? 'This corporate charter affirms your position as Founder & Director with 100% executive oversight, sole financial signatory powers, and strategic ownership of Phoenix Tech Solutions Private Limited.'
+          : `We are pleased to formally offer you the position of <strong>${escapeHtml(profile.designation)}</strong> in the <strong>${escapeHtml(profile.department)}</strong> at <strong>Phoenix Tech Solutions Private Limited</strong>. Your professional contributions will be integral to the commercial growth and technical innovation of our products including LeadX and Smart Review Management.`
+        }
+      </p>
+
+      <!-- Terms & Compensation Table -->
+      <div class="rounded-xl border border-slate-200 overflow-hidden">
+        <table class="w-full text-[11px]">
+          <thead class="bg-slate-100 font-bold text-slate-700">
+            <tr>
+              <th class="p-2 text-left">Terms & Conditions</th>
+              <th class="p-2 text-left">Corporate Specification</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <tr>
+              <td class="p-2 font-medium text-slate-500">Official Designation</td>
+              <td class="p-2 font-bold text-slate-900">${escapeHtml(profile.designation)}</td>
+            </tr>
+            <tr>
+              <td class="p-2 font-medium text-slate-500">Department / Unit</td>
+              <td class="p-2 font-bold text-slate-900">${escapeHtml(profile.department)}</td>
+            </tr>
+            <tr>
+              <td class="p-2 font-medium text-slate-500">Date of Joining</td>
+              <td class="p-2 font-bold text-slate-900">${escapeHtml(profile.joiningDate)}</td>
+            </tr>
+            <tr>
+              <td class="p-2 font-medium text-slate-500">Confirmation Date</td>
+              <td class="p-2 font-bold text-slate-900">${escapeHtml(profile.confirmationDate)}</td>
+            </tr>
+            <tr>
+              <td class="p-2 font-medium text-slate-500">Remuneration Model</td>
+              <td class="p-2 font-bold text-slate-900">${escapeHtml(profile.salaryModel)}</td>
+            </tr>
+            ${!isDirector ? `
+            <tr>
+              <td class="p-2 font-medium text-slate-500">Monthly Compensation</td>
+              <td class="p-2 font-extrabold text-[#026047]">${formatINR(profile.monthlySalary)} / Month (${numberToWordsINR(profile.monthlySalary)})</td>
+            </tr>
+            ` : `
+            <tr>
+              <td class="p-2 font-medium text-slate-500">Drawings & Governance</td>
+              <td class="p-2 font-extrabold text-[#026047]">Sole Executive Drawings &amp; Retained Earnings</td>
+            </tr>
+            `}
+            <tr>
+              <td class="p-2 font-medium text-slate-500">Place of Work</td>
+              <td class="p-2 text-slate-900">Pune, Maharashtra / Hybrid Work Environment</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="space-y-1.5 text-[11px] text-slate-600 leading-relaxed">
+        <p><strong>1. Code of Conduct:</strong> You agree to abide by the Company’s employment policies, NDA, client IP covenants, and ethical guidelines at all times.</p>
+        <p><strong>2. Confidentiality:</strong> All technical schemas, source codes, customer pipelines, and financial records remain the exclusive proprietary property of Phoenix Tech Solutions Pvt Ltd.</p>
+        <p><strong>3. Notice Period:</strong> Standard 30-day formal written notice period applies to either party following confirmation.</p>
+      </div>
+
+      <!-- Formal Signatures -->
+      <div class="pt-6 grid grid-cols-2 gap-8 border-t border-slate-200 mt-6">
+        <div>
+          <div class="text-[10px] text-slate-400 uppercase tracking-wider font-bold">Authorized Signatory</div>
+          <div class="mt-2 font-serif font-black text-sm text-[#026047] italic">Pranav Bansode</div>
+          <div class="text-xs font-bold text-slate-900">Pranav Bansode</div>
+          <div class="text-[10px] text-slate-500">Founder &amp; Director &bull; Sole Signatory</div>
+          <div class="text-[9px] text-emerald-600 font-semibold mt-0.5">Digitally Approved on Portal</div>
+        </div>
+        <div class="text-right">
+          <div class="text-[10px] text-slate-400 uppercase tracking-wider font-bold">Candidate Acceptance</div>
+          <div class="mt-2 font-serif font-black text-sm text-slate-700 italic">${escapeHtml(profile.name)}</div>
+          <div class="text-xs font-bold text-slate-900">${escapeHtml(profile.name)}</div>
+          <div class="text-[10px] text-slate-500">Emp Code: ${escapeHtml(profile.empId)}</div>
+          <div class="text-[9px] text-slate-400 mt-0.5">Accepted &amp; Digitally Verified</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  modal.classList.remove('hidden');
+};
+
+window.closeOfferLetterModal = function () {
+  const modal = document.getElementById('modal-offer-letter');
+  if (modal) modal.classList.add('hidden');
+};
+
+window.openSalarySlipModal = function (role, month) {
+  const targetRole = role || STATE.activeRole || 'pranav';
+  const profile = getEmployeeProfile(targetRole);
+  const modal = document.getElementById('modal-salary-slip');
+  const body = document.getElementById('salary-slip-print-body');
+  const select = document.getElementById('salary-slip-month-select');
+  if (!modal || !body) return;
+
+  const currentMonth = month || (select ? select.value : 'November 2026');
+  if (select) select.value = currentMonth;
+
+  const isDirector = targetRole === 'pranav';
+
+  body.innerHTML = `
+    <!-- Company Payslip Header -->
+    <div class="border-b-2 border-[#026047] pb-3 flex items-start justify-between">
+      <div>
+        <div class="flex items-center gap-2.5">
+          <img src="logo-emerald-transparent.png" class="h-8 w-8 object-contain shrink-0" onerror="this.src='logo-black-transparent.png'" alt="Phoenix Tech" />
+          <span class="text-sm font-black text-[#026047] uppercase tracking-wider">Phoenix Tech Solutions Private Limited</span>
+        </div>
+        <p class="text-[10px] text-slate-500 mt-0.5">
+          CIN: U72900PN2026PTC123456 &bull; 11-B, Lane No, opposite Etasha Society, Bharat Colony, Sayad Nagar, Hadapsar, Pune, Maharashtra 411028
+        </p>
+      </div>
+      <div class="text-right">
+        <div class="text-xs font-black text-slate-900 uppercase tracking-wide">Monthly Salary Slip</div>
+        <div class="text-xs font-bold text-[#026047] mt-0.5">${escapeHtml(currentMonth)}</div>
+      </div>
+    </div>
+
+    <!-- Employee Information Grid -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-lg bg-slate-50 border border-slate-200 text-[11px]">
+      <div>
+        <span class="text-slate-400 block text-[9px] uppercase font-bold">Employee Name</span>
+        <strong class="text-slate-900 text-xs">${escapeHtml(profile.name)}</strong>
+      </div>
+      <div>
+        <span class="text-slate-400 block text-[9px] uppercase font-bold">Employee Code</span>
+        <strong class="font-mono text-slate-900">${escapeHtml(profile.empId)}</strong>
+      </div>
+      <div>
+        <span class="text-slate-400 block text-[9px] uppercase font-bold">Designation</span>
+        <strong class="text-slate-900">${escapeHtml(profile.designation)}</strong>
+      </div>
+      <div>
+        <span class="text-slate-400 block text-[9px] uppercase font-bold">Department</span>
+        <strong class="text-slate-900">${escapeHtml(profile.department)}</strong>
+      </div>
+      <div>
+        <span class="text-slate-400 block text-[9px] uppercase font-bold">Date of Joining</span>
+        <span class="text-slate-700 font-medium">${escapeHtml(profile.joiningDate)}</span>
+      </div>
+      <div>
+        <span class="text-slate-400 block text-[9px] uppercase font-bold">Bank Name</span>
+        <span class="text-slate-700 font-medium">${escapeHtml(profile.bankName)}</span>
+      </div>
+      <div>
+        <span class="text-slate-400 block text-[9px] uppercase font-bold">Bank A/C No.</span>
+        <span class="font-mono text-slate-700">${escapeHtml(profile.bankAccount)}</span>
+      </div>
+      <div>
+        <span class="text-slate-400 block text-[9px] uppercase font-bold">IFSC / PAN</span>
+        <span class="font-mono text-slate-700">${escapeHtml(profile.ifsc)} &bull; ${escapeHtml(profile.pan)}</span>
+      </div>
+    </div>
+
+    ${isDirector ? `
+    <!-- Director Governance Box -->
+    <div class="p-4 rounded-xl bg-emerald-50 border border-emerald-200 space-y-2">
+      <div class="flex items-center justify-between">
+        <span class="font-black text-sm text-[#026047]">Executive Remuneration: Founder &amp; Sole Signatory</span>
+        <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#026047] text-[#fffde8]">Equity / Drawings Model</span>
+      </div>
+      <p class="text-[11px] text-slate-600 leading-relaxed">
+        Pranav Bansode exercises executive drawings from company retained capital in accordance with Sole Signatory Board resolutions. Salaried payroll deductions (TDS/PT) do not apply to directorship capital drawings.
+      </p>
+      <div class="pt-2 flex items-center justify-between font-bold text-xs border-t border-emerald-200">
+        <span>Executive Drawings Authorized:</span>
+        <span class="text-[#026047] font-black text-sm">Active &bull; Retained Profit Position</span>
+      </div>
+    </div>
+    ` : `
+    <!-- Earnings & Deductions Breakup Table -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <!-- Earnings -->
+      <div class="rounded-xl border border-slate-200 overflow-hidden">
+        <div class="bg-slate-100 p-2 font-bold text-xs text-slate-700 flex justify-between">
+          <span>Earnings Description</span>
+          <span>Amount (INR)</span>
+        </div>
+        <div class="p-2.5 space-y-2 text-[11px]">
+          <div class="flex justify-between">
+            <span class="text-slate-600">Basic Pay (50%)</span>
+            <span class="font-mono font-bold text-slate-900">${formatINR(profile.basicSalary)}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-600">House Rent Allowance (HRA - 30%)</span>
+            <span class="font-mono font-bold text-slate-900">${formatINR(profile.hra)}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-600">Special Retainer Allowance (20%)</span>
+            <span class="font-mono font-bold text-slate-900">${formatINR(profile.specialAllowance)}</span>
+          </div>
+          <div class="pt-2 border-t border-slate-200 flex justify-between font-bold text-xs">
+            <span class="text-slate-900">Total Gross Earnings</span>
+            <span class="text-[#026047] font-black">${formatINR(profile.monthlySalary)}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Deductions -->
+      <div class="rounded-xl border border-slate-200 overflow-hidden">
+        <div class="bg-slate-100 p-2 font-bold text-xs text-slate-700 flex justify-between">
+          <span>Deductions Description</span>
+          <span>Amount (INR)</span>
+        </div>
+        <div class="p-2.5 space-y-2 text-[11px]">
+          <div class="flex justify-between">
+            <span class="text-slate-600">Professional Tax (PT - Maharashtra)</span>
+            <span class="font-mono font-bold text-slate-900">${formatINR(profile.professionalTax)}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-600">TDS / Income Tax</span>
+            <span class="font-mono font-bold text-slate-900">₹0.00</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-600">Other Deductions</span>
+            <span class="font-mono font-bold text-slate-900">₹0.00</span>
+          </div>
+          <div class="pt-2 border-t border-slate-200 flex justify-between font-bold text-xs">
+            <span class="text-slate-900">Total Deductions</span>
+            <span class="text-rose-600 font-black">${formatINR(profile.professionalTax)}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Net Pay Banner -->
+    <div class="p-3.5 rounded-xl bg-[#026047]/10 border border-[#026047]/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+      <div>
+        <span class="text-[10px] text-slate-500 uppercase font-black">Net Salary Payable (Transferred via NEFT)</span>
+        <div class="text-base font-black text-[#026047]">${formatINR(profile.netMonthly)}</div>
+        <div class="text-[10px] text-slate-600 italic">In Words: ${numberToWordsINR(profile.netMonthly)}</div>
+      </div>
+      <div class="sm:text-right">
+        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#026047] text-[#fffde8]">✓ Direct Deposit Paid</span>
+        <div class="text-[9px] text-slate-400 mt-1">Ref: PTS-PAY-${profile.empId}-${currentMonth.replace(/\s+/g, '').toUpperCase()}</div>
+      </div>
+    </div>
+    `}
+
+    <!-- Footer Authorization -->
+    <div class="pt-4 border-t border-slate-200 flex items-center justify-between text-[10px] text-slate-500">
+      <div>
+        This is a system-generated payslip authorized under company seal.<br/>
+        <strong>Sole Signatory:</strong> Pranav Bansode (Founder &amp; Director)
+      </div>
+      <div class="text-right font-serif font-black text-xs text-[#026047] italic">
+        Pranav Bansode<br/>
+        <span class="font-sans font-normal text-[9px] text-slate-400 not-italic">Executive Authorized Seal</span>
+      </div>
+    </div>
+  `;
+
+  modal.classList.remove('hidden');
+};
+
+window.updateSalarySlipMonth = function (month) {
+  openSalarySlipModal(STATE.activeRole, month);
+};
+
+window.closeSalarySlipModal = function () {
+  const modal = document.getElementById('modal-salary-slip');
+  if (modal) modal.classList.add('hidden');
+};
+
+window.openCompanyPoliciesModal = function () {
+  const modal = document.getElementById('modal-company-policies');
+  const body = document.getElementById('company-policies-print-body');
+  if (!modal || !body) return;
+
+  body.innerHTML = `
+    <!-- Company Policies Document -->
+    <div class="border-b-2 border-[#026047] pb-3 flex items-start justify-between">
+      <div>
+        <div class="flex items-center gap-2">
+          <div class="w-7 h-7 rounded-lg bg-[#026047] text-[#fffde8] font-black text-xs flex items-center justify-center">PT</div>
+          <span class="text-sm font-black text-[#026047] uppercase tracking-wider">Phoenix Tech Solutions Private Limited</span>
+        </div>
+        <p class="text-[10px] text-slate-500 mt-0.5">Corporate Governance &bull; Employment &amp; Compliance Manual 2026</p>
+      </div>
+      <div class="text-right">
+        <span class="px-2 py-0.5 rounded bg-emerald-50 text-[#026047] text-[10px] font-mono font-bold border border-emerald-200">DOC: PTS-POL-2026-v2</span>
+      </div>
+    </div>
+
+    <div class="space-y-4 text-xs text-slate-700 dark:text-slate-300">
+      <!-- Policy 1 -->
+      <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-1.5">
+        <h4 class="font-bold text-slate-900 dark:text-white flex items-center gap-1.5 text-xs">
+          <span>🏛️</span> 1. Code of Business Conduct &amp; Professional Integrity
+        </h4>
+        <p class="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
+          All team members must maintain highest ethical standards during client outreach, product demonstrations, and technical deliveries. Representing Phoenix Tech Solutions requires honesty, punctuality, and zero tolerance for deceptive practices or unauthorized representation.
+        </p>
+      </div>
+
+      <!-- Policy 2 -->
+      <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-1.5">
+        <h4 class="font-bold text-slate-900 dark:text-white flex items-center gap-1.5 text-xs">
+          <span>🔒</span> 2. Non-Disclosure Agreement (NDA) &amp; Client Data Protection
+        </h4>
+        <p class="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
+          All client databases, prospect requirements, pricing agreements, API keys, source code, and Supabase credentials are strictly confidential. Sharing internal company data or client information with unauthorized third parties constitutes a violation of confidentiality and will result in immediate termination and legal action.
+        </p>
+      </div>
+
+      <!-- Policy 3 -->
+      <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-1.5">
+        <h4 class="font-bold text-slate-900 dark:text-white flex items-center gap-1.5 text-xs">
+          <span>💡</span> 3. Intellectual Property (IP) &amp; Technical Ownership
+        </h4>
+        <p class="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
+          All features, architectures, marketing funnels, and codebases developed for LeadX, Smart Review Management, and custom client implementations remain the 100% exclusive intellectual property of Phoenix Tech Solutions Private Limited. Team members assign all rights, titles, and interests in any work created during employment to the Company.
+        </p>
+      </div>
+
+      <!-- Policy 4 -->
+      <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-1.5">
+        <h4 class="font-bold text-slate-900 dark:text-white flex items-center gap-1.5 text-xs">
+          <span>💳</span> 4. Expense Reimbursement &amp; Corporate Outflows
+        </h4>
+        <p class="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
+          Only legitimate operational expenses (server hosting, outreach tooling, approved client travel) are eligible for reimbursement. All expense submissions must be recorded on the portal and require formal authorization by Founder &amp; Director Pranav Bansode prior to payout.
+        </p>
+      </div>
+
+      <!-- Policy 5 -->
+      <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-1.5">
+        <h4 class="font-bold text-slate-900 dark:text-white flex items-center gap-1.5 text-xs">
+          <span>⚖️</span> 5. Sole Signatory &amp; Executive Authority
+        </h4>
+        <p class="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
+          Pranav Bansode is the sole registered signatory authorized to enter into contracts, approve client proposals, disburse salaries/drawings, and execute commercial commitments on behalf of Phoenix Tech Solutions Private Limited.
+        </p>
+      </div>
+    </div>
+  `;
+
+  modal.classList.remove('hidden');
+};
+
+window.closeCompanyPoliciesModal = function () {
+  const modal = document.getElementById('modal-company-policies');
+  if (modal) modal.classList.add('hidden');
+};
+
+// ==============================================================================
+// OFFICIAL CORPORATE DOCUMENTS REGISTRY & PAPER FORMAT GENERATOR
+// ==============================================================================
+STATE.currentDocFolder = null; // null = root documents list, 'salary_slips_folder' = inside salary slips
+
+const EMPLOYEE_DOCUMENTS_STRUCTURE = {
+  aryan: {
+    root: [
+      { id: 'offer_letter', name: 'Offer Letter - Aryan Bhore.pdf', type: 'pdf', dateModified: '2/15/2026 10:30 AM' },
+      { id: 'salary_slips_folder', name: 'Salary Slips', isFolder: true, itemCount: 3, dateModified: '11/1/2026 11:00 AM' },
+      { id: 'company_policies', name: 'Company Policies & Code of Conduct.docx', type: 'word', dateModified: '1/15/2026 9:00 AM' },
+      { id: 'nda_agreement', name: 'Non-Disclosure Agreement (NDA).docx', type: 'word', dateModified: '2/15/2026 10:45 AM' },
+      { id: 'joining_record', name: 'Employee Joining Record - Aryan Bhore.pdf', type: 'pdf', dateModified: '2/15/2026 11:00 AM' }
+    ],
+    salary_slips_folder: [
+      { id: 'salary_slip_nov', name: 'Salary Slip - November 2026.pdf', type: 'pdf', dateModified: '11/1/2026 11:00 AM', month: 'November 2026' },
+      { id: 'salary_slip_oct', name: 'Salary Slip - October 2026.pdf', type: 'pdf', dateModified: '10/1/2026 10:30 AM', month: 'October 2026' },
+      { id: 'salary_slip_sep', name: 'Salary Slip - September 2026.pdf', type: 'pdf', dateModified: '9/1/2026 10:15 AM', month: 'September 2026' }
+    ]
+  },
+  vivek: {
+    root: [
+      { id: 'offer_letter', name: 'Offer Letter - Vivek Gajdhane.pdf', type: 'pdf', dateModified: '2/1/2026 10:00 AM' },
+      { id: 'salary_slips_folder', name: 'Salary Slips', isFolder: true, itemCount: 3, dateModified: '11/1/2026 11:00 AM' },
+      { id: 'company_policies', name: 'Company Policies & Code of Conduct.docx', type: 'word', dateModified: '1/15/2026 9:00 AM' },
+      { id: 'nda_agreement', name: 'Non-Disclosure Agreement (NDA).docx', type: 'word', dateModified: '2/1/2026 10:30 AM' },
+      { id: 'joining_record', name: 'Employee Joining Record - Vivek Gajdhane.pdf', type: 'pdf', dateModified: '2/1/2026 11:00 AM' }
+    ],
+    salary_slips_folder: [
+      { id: 'salary_slip_nov', name: 'Salary Slip - November 2026.pdf', type: 'pdf', dateModified: '11/1/2026 11:00 AM', month: 'November 2026' },
+      { id: 'salary_slip_oct', name: 'Salary Slip - October 2026.pdf', type: 'pdf', dateModified: '10/1/2026 10:30 AM', month: 'October 2026' },
+      { id: 'salary_slip_sep', name: 'Salary Slip - September 2026.pdf', type: 'pdf', dateModified: '9/1/2026 10:15 AM', month: 'September 2026' }
+    ]
+  },
+  arshad: {
+    root: [
+      { id: 'offer_letter', name: 'Offer Letter - Arshad Shaikh.pdf', type: 'pdf', dateModified: '1/20/2026 10:00 AM' },
+      { id: 'salary_slips_folder', name: 'Salary Slips', isFolder: true, itemCount: 3, dateModified: '11/1/2026 11:00 AM' },
+      { id: 'company_policies', name: 'Company Policies & Code of Conduct.docx', type: 'word', dateModified: '1/15/2026 9:00 AM' },
+      { id: 'nda_agreement', name: 'Non-Disclosure Agreement (NDA).docx', type: 'word', dateModified: '1/20/2026 10:30 AM' },
+      { id: 'joining_record', name: 'Employee Joining Record - Arshad Shaikh.pdf', type: 'pdf', dateModified: '1/20/2026 11:00 AM' }
+    ],
+    salary_slips_folder: [
+      { id: 'salary_slip_nov', name: 'Salary Slip - November 2026.pdf', type: 'pdf', dateModified: '11/1/2026 11:00 AM', month: 'November 2026' },
+      { id: 'salary_slip_oct', name: 'Salary Slip - October 2026.pdf', type: 'pdf', dateModified: '10/1/2026 10:30 AM', month: 'October 2026' },
+      { id: 'salary_slip_sep', name: 'Salary Slip - September 2026.pdf', type: 'pdf', dateModified: '9/1/2026 10:15 AM', month: 'September 2026' }
+    ]
+  },
+  pranav: {
+    root: [
+      { id: 'charter_directorship', name: 'Charter of Directorship & Founding Authority.pdf', type: 'pdf', dateModified: '1/10/2026 10:00 AM' },
+      { id: 'coi_moa', name: 'Certificate of Incorporation & MOA-AOA.pdf', type: 'pdf', dateModified: '1/12/2026 11:30 AM' },
+      { id: 'salary_slips_folder', name: 'Salary Slips & Executive Drawings', isFolder: true, itemCount: 3, dateModified: '11/1/2026 11:00 AM' },
+      { id: 'company_policies', name: 'Corporate Policies & Governance Code.docx', type: 'word', dateModified: '1/15/2026 9:00 AM' },
+      { id: 'signatory_register', name: 'Sole Signatory Executive Authority Register.pdf', type: 'pdf', dateModified: '1/15/2026 10:00 AM' },
+      { id: 'joining_record', name: 'Director Statutory Master Record - Pranav Bansode.pdf', type: 'pdf', dateModified: '1/10/2026 10:00 AM' }
+    ],
+    salary_slips_folder: [
+      { id: 'salary_slip_nov', name: 'Executive Drawings Slip - November 2026.pdf', type: 'pdf', dateModified: '11/1/2026 11:00 AM', month: 'November 2026' },
+      { id: 'salary_slip_oct', name: 'Executive Drawings Slip - October 2026.pdf', type: 'pdf', dateModified: '10/1/2026 10:30 AM', month: 'October 2026' },
+      { id: 'salary_slip_sep', name: 'Executive Drawings Slip - September 2026.pdf', type: 'pdf', dateModified: '9/1/2026 10:15 AM', month: 'September 2026' }
+    ]
+  }
+};
+
+// Backwards compatibility alias
+const EMPLOYEE_DOCUMENTS_LIST = {
+  aryan: [...EMPLOYEE_DOCUMENTS_STRUCTURE.aryan.root, ...EMPLOYEE_DOCUMENTS_STRUCTURE.aryan.salary_slips_folder],
+  vivek: [...EMPLOYEE_DOCUMENTS_STRUCTURE.vivek.root, ...EMPLOYEE_DOCUMENTS_STRUCTURE.vivek.salary_slips_folder],
+  arshad: [...EMPLOYEE_DOCUMENTS_STRUCTURE.arshad.root, ...EMPLOYEE_DOCUMENTS_STRUCTURE.arshad.salary_slips_folder],
+  pranav: [...EMPLOYEE_DOCUMENTS_STRUCTURE.pranav.root, ...EMPLOYEE_DOCUMENTS_STRUCTURE.pranav.salary_slips_folder]
+};
+
+window.openDocumentsFolder = function (folderId) {
+  STATE.currentDocFolder = folderId;
+  renderMyProfileTab();
+};
+
+window.closeDocumentsFolder = function () {
+  STATE.currentDocFolder = null;
+  renderMyProfileTab();
+};
+
+
+let CURRENT_PAPER_METADATA = {
+  id: '',
+  title: 'Document',
+  filename: 'Document.doc',
+  type: 'pdf',
+  role: 'aryan'
+};
+
+window.downloadDocumentAsWord = function (elementId, filename) {
+  const element = document.getElementById(elementId);
+  if (!element) return;
+  const htmlContent = `
+    <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+    <head>
+      <meta charset='utf-8'>
+      <title>${escapeHtml(filename || 'Document')}</title>
+      <style>
+        @page {
+          size: 21cm 29.7cm;
+          margin: 2cm 2cm 2cm 2cm;
+          mso-page-orientation: portrait;
+        }
+        body {
+          font-family: Arial, Calibri, 'Segoe UI', sans-serif;
+          font-size: 11pt;
+          line-height: 1.5;
+          color: #0f172a;
+          background: #ffffff;
+        }
+        h1, h2, h3, h4 { color: #026047; margin-bottom: 6pt; }
+        p { margin-bottom: 8pt; }
+        table { border-collapse: collapse; width: 100%; margin-top: 12pt; margin-bottom: 12pt; }
+        th, td { border: 1px solid #cbd5e1; padding: 6pt 8pt; text-align: left; font-size: 10pt; }
+        th { background-color: #f1f5f9; color: #0f172a; font-weight: bold; }
+        .text-emerald { color: #026047; }
+        .stamp-box { border: 2px dashed #026047; padding: 8pt 12pt; color: #026047; font-weight: bold; font-size: 9pt; display: inline-block; margin-top: 10pt; }
+      </style>
+    </head>
+    <body>
+      ${element.innerHTML}
+    </body>
+    </html>
+  `;
+
+  const blob = new Blob(['\ufeff', htmlContent], {
+    type: 'application/msword'
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const baseName = (filename || 'Phoenix-Corporate-Document').replace(/\.pdf$/i, '').replace(/\.docx?$/i, '');
+  const outName = `${baseName}.doc`;
+  a.download = outName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast(`Downloading "${outName}" as Microsoft Word document`);
+};
+
+window.downloadCurrentPaperAsWord = function () {
+  const fname = CURRENT_PAPER_METADATA.filename || 'Phoenix-Corporate-Document';
+  downloadDocumentAsWord('paper-sheet-printable-area', fname);
+};
+
+window.closePaperDocumentModal = function () {
+  const modal = document.getElementById('modal-paper-document');
+  if (modal) modal.classList.add('hidden');
+};
+
+window.openPaperDocumentModal = function (docId, role) {
+  const targetRole = role || STATE.activeRole || 'pranav';
+  const profile = getEmployeeProfile(targetRole);
+  const isFounder = targetRole === 'pranav';
+  const docList = EMPLOYEE_DOCUMENTS_LIST[targetRole] || EMPLOYEE_DOCUMENTS_LIST.aryan;
+  const docMeta = docList.find((d) => d.id === docId) || docList[0];
+
+  const modal = document.getElementById('modal-paper-document');
+  const paperArea = document.getElementById('paper-sheet-printable-area');
+  const titleEl = document.getElementById('paper-doc-title');
+  const subtitleEl = document.getElementById('paper-doc-subtitle');
+  const badgeEl = document.getElementById('paper-doc-badge');
+  const iconEl = document.getElementById('paper-doc-type-icon');
+  const footerMetaEl = document.getElementById('paper-doc-footer-meta');
+
+  if (!modal || !paperArea) return;
+
+  CURRENT_PAPER_METADATA = {
+    id: docId,
+    title: docMeta.name,
+    filename: docMeta.name,
+    type: docMeta.type,
+    role: targetRole
+  };
+
+  if (titleEl) titleEl.textContent = docMeta.name;
+  if (subtitleEl) subtitleEl.textContent = `Phoenix Tech Solutions Private Limited • ${profile.name} (${profile.empId})`;
+  if (iconEl) iconEl.textContent = docMeta.type === 'word' ? '📝' : '📄';
+  if (badgeEl) {
+    badgeEl.textContent = docMeta.type === 'word' ? 'Word (.doc) Document' : 'PDF Document';
+    badgeEl.className = docMeta.type === 'word'
+      ? 'px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-blue-950 text-blue-300 border border-blue-800 shrink-0'
+      : 'px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-emerald-950 text-emerald-300 border border-emerald-800 shrink-0';
+  }
+  if (footerMetaEl) {
+    footerMetaEl.textContent = `CIN: U72900PN2026PTC123456 • Phoenix Portal Verified • Sole Signatory: Pranav Bansode`;
+  }
+
+  // Generate Paper Sheet Content
+  let sheetHtml = '';
+
+  // Header Letterhead Template
+  const letterheadHtml = `
+    <!-- Letterhead -->
+    <div class="border-b-2 border-[#026047] pb-5 flex items-start justify-between">
+      <div>
+        <div class="flex items-center gap-3">
+          <img src="logo-emerald-transparent.png" class="h-10 w-10 object-contain shrink-0" onerror="this.src='logo-black-transparent.png'" alt="Phoenix Tech" />
+          <div>
+            <h1 class="text-lg font-black text-[#026047] tracking-wider uppercase">Phoenix Tech Solutions Private Limited</h1>
+            <p class="text-[10px] text-slate-500 font-medium">CIN: U72900PN2026PTC123456 &bull; Reg. Under Companies Act, 2013 (Govt. of India)</p>
+          </div>
+        </div>
+        <p class="text-[11px] text-slate-600 mt-2 leading-tight">
+          Registered Office: 11-B, Lane No, opposite Etasha Society, Bharat Colony, Sayad Nagar, Hadapsar, Pune, Maharashtra 411028<br/>
+          Official Portal: portal.phoenixtech.com &bull; Corporate Email: contact@phoenixtech.com
+        </p>
+      </div>
+      <div class="text-right">
+        <div class="inline-block px-3 py-1 rounded bg-emerald-50 text-[#026047] font-mono text-[10px] font-bold border border-emerald-200">
+          REF: ${escapeHtml(profile.offerLetterRef || 'PTS-DOC-2026')}
+        </div>
+        <div class="text-[10px] text-slate-500 mt-1">Date: <strong>${escapeHtml(docMeta.dateModified.split(' ')[0])}</strong></div>
+        <div class="text-[9px] text-emerald-600 font-semibold mt-0.5">&bull; Official Corporate Record</div>
+      </div>
+    </div>
+  `;
+
+  // Signatures & Corporate Rubber Stamp Footer
+  const signatureFooterHtml = `
+    <div class="pt-8 border-t border-slate-200 mt-8 grid grid-cols-2 gap-8 text-xs">
+      <div>
+        <div class="text-[10px] text-slate-400 uppercase tracking-wider font-bold">For Phoenix Tech Solutions Private Limited</div>
+        <div class="mt-3">
+          <div class="font-serif italic font-black text-base text-[#026047]">Pranav Bansode</div>
+          <div class="font-bold text-slate-900 mt-0.5">Pranav Bansode</div>
+          <div class="text-[10px] text-slate-500">Founder &amp; Director &bull; Sole Signatory</div>
+          <div class="text-[9px] text-emerald-600 font-semibold mt-0.5">DIN: 09845123 &bull; Digital Signature Verified</div>
+        </div>
+        <!-- Realistic Corporate Rubber Stamp -->
+        <div class="mt-3 inline-block px-3 py-1.5 rounded-lg border-2 border-dashed border-[#026047]/60 text-[#026047] text-[10px] font-black uppercase tracking-wider rotate-[-2deg] bg-emerald-50/50">
+          ★ PHOENIX TECH SOLUTIONS PVT. LTD. ★<br/>AUTHORIZED SIGNATORY &bull; PUNE
+        </div>
+      </div>
+      <div class="text-right">
+        <div class="text-[10px] text-slate-400 uppercase tracking-wider font-bold">${isFounder ? 'Statutory Registry' : 'Employee Acceptance'}</div>
+        <div class="mt-3">
+          <div class="font-serif italic font-black text-base text-slate-700">${escapeHtml(profile.name)}</div>
+          <div class="font-bold text-slate-900 mt-0.5">${escapeHtml(profile.name)}</div>
+          <div class="text-[10px] text-slate-500">Employee ID: ${escapeHtml(profile.empId)}</div>
+          <div class="text-[9px] text-slate-400 mt-0.5">Signed &amp; Stored in Corporate HR Cloud</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  if (docId === 'offer_letter' || docId === 'charter_directorship') {
+    sheetHtml = `
+      ${letterheadHtml}
+      <div class="space-y-4 pt-3 text-xs leading-relaxed text-slate-800">
+        <div>
+          <div class="text-[11px] text-slate-500">To:</div>
+          <div class="font-extrabold text-sm text-slate-900">${escapeHtml(profile.name)}</div>
+          <div class="text-[11px] text-slate-600">Employee Code: <strong class="font-mono">${escapeHtml(profile.empId)}</strong> &bull; PAN: <span class="font-mono">${escapeHtml(profile.pan)}</span></div>
+          <div class="text-[11px] text-slate-600">${escapeHtml(profile.email)}</div>
+        </div>
+
+        <div class="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-xs font-bold text-slate-900">
+          Subject: ${isFounder ? 'Executive Charter of Directorship & Founding Authority' : `Formal Letter of Appointment - ${escapeHtml(profile.designation)}`}
+        </div>
+
+        <p>Dear <strong>${escapeHtml(profile.name)}</strong>,</p>
+
+        <p>
+          ${isFounder
+            ? 'This corporate charter affirms your position as Founder & Director with 100% executive oversight, sole financial signatory powers, and strategic ownership of Phoenix Tech Solutions Private Limited.'
+            : `We are pleased to formally offer you the position of <strong>${escapeHtml(profile.designation)}</strong> in the <strong>${escapeHtml(profile.department)}</strong> at <strong>Phoenix Tech Solutions Private Limited</strong>. Your professional contributions will be integral to the commercial growth and technical innovation of our products including LeadX and Smart Review Management.`
+          }
+        </p>
+
+        <!-- Specification Table -->
+        <div class="rounded-xl border border-slate-200 overflow-hidden my-3">
+          <table class="w-full text-[11px]">
+            <thead class="bg-slate-100 font-bold text-slate-700">
+              <tr>
+                <th class="p-2.5 text-left border-b border-slate-200">Terms &amp; Conditions</th>
+                <th class="p-2.5 text-left border-b border-slate-200">Corporate Specification</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              <tr>
+                <td class="p-2 font-medium text-slate-500">Official Designation</td>
+                <td class="p-2 font-bold text-slate-900">${escapeHtml(profile.designation)}</td>
+              </tr>
+              <tr>
+                <td class="p-2 font-medium text-slate-500">Department / Unit</td>
+                <td class="p-2 font-bold text-slate-900">${escapeHtml(profile.department)}</td>
+              </tr>
+              <tr>
+                <td class="p-2 font-medium text-slate-500">Date of Joining</td>
+                <td class="p-2 font-bold text-slate-900">${escapeHtml(profile.joiningDate)}</td>
+              </tr>
+              <tr>
+                <td class="p-2 font-medium text-slate-500">Confirmation Date</td>
+                <td class="p-2 font-bold text-slate-900">${escapeHtml(profile.confirmationDate)}</td>
+              </tr>
+              <tr>
+                <td class="p-2 font-medium text-slate-500">Remuneration Model</td>
+                <td class="p-2 font-bold text-slate-900">${escapeHtml(profile.salaryModel)}</td>
+              </tr>
+              ${!isFounder ? `
+              <tr>
+                <td class="p-2 font-medium text-slate-500">Monthly Compensation</td>
+                <td class="p-2 font-extrabold text-[#026047]">${formatINR(profile.monthlySalary)} / Month (${numberToWordsINR(profile.monthlySalary)})</td>
+              </tr>
+              ` : `
+              <tr>
+                <td class="p-2 font-medium text-slate-500">Drawings &amp; Governance</td>
+                <td class="p-2 font-extrabold text-[#026047]">Sole Executive Drawings &amp; Retained Earnings</td>
+              </tr>
+              `}
+              <tr>
+                <td class="p-2 font-medium text-slate-500">Place of Work</td>
+                <td class="p-2 text-slate-900">Pune, Maharashtra / Hybrid Work Environment</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="space-y-1.5 text-[11px] text-slate-600 leading-relaxed">
+          <p><strong>1. Code of Conduct:</strong> You agree to abide by the Company’s employment policies, NDA, client IP covenants, and ethical guidelines at all times.</p>
+          <p><strong>2. Confidentiality:</strong> All technical schemas, source codes, customer pipelines, and financial records remain the exclusive proprietary property of Phoenix Tech Solutions Pvt Ltd.</p>
+          <p><strong>3. Notice Period:</strong> Standard 30-day formal written notice period applies to either party following confirmation.</p>
+        </div>
+
+        ${signatureFooterHtml}
+      </div>
+    `;
+  } else if (docId.startsWith('salary_slip')) {
+    const slipMonth = docMeta.month || 'November 2026';
+    const basic = Math.round(profile.monthlySalary * 0.5);
+    const hra = Math.round(profile.monthlySalary * 0.3);
+    const retainer = Math.round(profile.monthlySalary * 0.2);
+    const ptax = 200;
+    const net = isFounder ? 0 : (profile.monthlySalary - ptax);
+
+    sheetHtml = `
+      ${letterheadHtml}
+      <div class="space-y-4 pt-3 text-xs leading-relaxed text-slate-800">
+        <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+          <div>
+            <h2 class="text-sm font-black text-slate-900 uppercase tracking-wide">Monthly Salary Slip &bull; Statement of Earnings</h2>
+            <p class="text-[11px] text-slate-500">Billing Period: <strong>${escapeHtml(slipMonth)}</strong></p>
+          </div>
+          <div class="text-right">
+            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-[#026047]">Disbursed &amp; Reconciled</span>
+          </div>
+        </div>
+
+        <!-- Employee Info Grid -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-lg bg-slate-50 border border-slate-200 text-[11px]">
+          <div>
+            <span class="text-slate-400 block text-[9px] uppercase font-bold">Employee Name</span>
+            <strong class="text-slate-900 text-xs">${escapeHtml(profile.name)}</strong>
+          </div>
+          <div>
+            <span class="text-slate-400 block text-[9px] uppercase font-bold">Employee ID / PAN</span>
+            <strong class="font-mono text-slate-900">${escapeHtml(profile.empId)}</strong> / <span class="font-mono">${escapeHtml(profile.pan)}</span>
+          </div>
+          <div>
+            <span class="text-slate-400 block text-[9px] uppercase font-bold">Department</span>
+            <strong class="text-slate-900">${escapeHtml(profile.department)}</strong>
+          </div>
+          <div>
+            <span class="text-slate-400 block text-[9px] uppercase font-bold">Designation</span>
+            <strong class="text-slate-900">${escapeHtml(profile.designation)}</strong>
+          </div>
+          <div>
+            <span class="text-slate-400 block text-[9px] uppercase font-bold">Bank Name</span>
+            <strong class="text-slate-900">${escapeHtml(profile.bankName)}</strong>
+          </div>
+          <div>
+            <span class="text-slate-400 block text-[9px] uppercase font-bold">Account / IFSC</span>
+            <span class="font-mono text-slate-900">${escapeHtml(profile.bankAccount)}</span> (${escapeHtml(profile.ifsc)})
+          </div>
+          <div>
+            <span class="text-slate-400 block text-[9px] uppercase font-bold">Days in Month / Worked</span>
+            <strong class="text-slate-900">30 / 30 Days</strong>
+          </div>
+          <div>
+            <span class="text-slate-400 block text-[9px] uppercase font-bold">Payment Method</span>
+            <strong class="text-slate-900">Direct Bank NEFT</strong>
+          </div>
+        </div>
+
+        <!-- Breakdown Table -->
+        <div class="grid grid-cols-2 gap-4">
+          <div class="rounded-xl border border-slate-200 overflow-hidden">
+            <table class="w-full text-[11px]">
+              <thead class="bg-slate-100 font-bold text-slate-700">
+                <tr>
+                  <th class="p-2 text-left border-b border-slate-200">Earnings</th>
+                  <th class="p-2 text-right border-b border-slate-200">Amount (₹)</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                <tr>
+                  <td class="p-2 text-slate-600">Basic Salary (50%)</td>
+                  <td class="p-2 text-right font-mono font-bold">${formatINR(basic, false)}</td>
+                </tr>
+                <tr>
+                  <td class="p-2 text-slate-600">House Rent Allowance (30%)</td>
+                  <td class="p-2 text-right font-mono font-bold">${formatINR(hra, false)}</td>
+                </tr>
+                <tr>
+                  <td class="p-2 text-slate-600">Special Retainer (20%)</td>
+                  <td class="p-2 text-right font-mono font-bold">${formatINR(retainer, false)}</td>
+                </tr>
+                <tr class="bg-slate-50 font-bold">
+                  <td class="p-2 text-slate-900">Gross Earnings</td>
+                  <td class="p-2 text-right font-mono text-[#026047]">${formatINR(profile.monthlySalary, false)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="rounded-xl border border-slate-200 overflow-hidden">
+            <table class="w-full text-[11px]">
+              <thead class="bg-slate-100 font-bold text-slate-700">
+                <tr>
+                  <th class="p-2 text-left border-b border-slate-200">Deductions</th>
+                  <th class="p-2 text-right border-b border-slate-200">Amount (₹)</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                <tr>
+                  <td class="p-2 text-slate-600">Professional Tax (PT)</td>
+                  <td class="p-2 text-right font-mono font-bold">₹200.00</td>
+                </tr>
+                <tr>
+                  <td class="p-2 text-slate-600">Tax Deducted at Source (TDS)</td>
+                  <td class="p-2 text-right font-mono font-bold">₹0.00</td>
+                </tr>
+                <tr>
+                  <td class="p-2 text-slate-600">Provident Fund (Opt-out)</td>
+                  <td class="p-2 text-right font-mono font-bold">₹0.00</td>
+                </tr>
+                <tr class="bg-slate-50 font-bold">
+                  <td class="p-2 text-slate-900">Total Deductions</td>
+                  <td class="p-2 text-right font-mono text-red-600">₹200.00</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Net Payable Box -->
+        <div class="p-4 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between">
+          <div>
+            <div class="text-[10px] text-[#026047] font-bold uppercase tracking-wider">Net Amount Disbursed to Bank</div>
+            <div class="text-xs text-slate-600 mt-0.5">${numberToWordsINR(net)}</div>
+          </div>
+          <div class="text-xl font-black text-[#026047]">${formatINR(net)}</div>
+        </div>
+
+        ${signatureFooterHtml}
+      </div>
+    `;
+  } else if (docId === 'company_policies') {
+    sheetHtml = `
+      ${letterheadHtml}
+      <div class="space-y-4 pt-3 text-xs leading-relaxed text-slate-800">
+        <div class="border-b border-slate-200 pb-2">
+          <h2 class="text-sm font-black text-slate-900 uppercase tracking-wide">Corporate Code of Conduct &amp; Operating Policies</h2>
+          <p class="text-[11px] text-slate-500">Standard Specification: <strong>PTS-POL-2026</strong> &bull; Effective: January 1, 2026</p>
+        </div>
+
+        <div class="space-y-3 text-[11px] text-slate-700">
+          <div class="p-3 rounded-lg bg-slate-50 border border-slate-200">
+            <h3 class="font-bold text-slate-900 text-xs mb-1">1. Proprietary Information &amp; Intellectual Property</h3>
+            <p>All algorithms, models, scraper architectures, database schemas, client funnels, and marketing collateral developed by employees or contractors are the exclusive, sole intellectual property of Phoenix Tech Solutions Private Limited.</p>
+          </div>
+
+          <div class="p-3 rounded-lg bg-slate-50 border border-slate-200">
+            <h3 class="font-bold text-slate-900 text-xs mb-1">2. Client Data Security &amp; Confidentiality</h3>
+            <p>Under no circumstances may client data, lead contacts, pricing quotes, or proposal architectures be shared outside the corporate portal or stored on unauthorized personal devices.</p>
+          </div>
+
+          <div class="p-3 rounded-lg bg-slate-50 border border-slate-200">
+            <h3 class="font-bold text-slate-900 text-xs mb-1">3. Non-Compete &amp; Anti-Solicitation Covenant</h3>
+            <p>During the period of engagement and for twelve (12) months following separation, personnel agree not to engage directly or indirectly with active Phoenix clients or solicit existing corporate partners.</p>
+          </div>
+
+          <div class="p-3 rounded-lg bg-slate-50 border border-slate-200">
+            <h3 class="font-bold text-slate-900 text-xs mb-1">4. Sole Signatory Executive Governance</h3>
+            <p>Pranav Bansode is the sole registered signatory authorized to enter into contracts, approve client proposals, disburse salaries/drawings, and execute commercial commitments on behalf of Phoenix Tech Solutions Private Limited.</p>
+          </div>
+        </div>
+
+        ${signatureFooterHtml}
+      </div>
+    `;
+  } else if (docId === 'nda_agreement') {
+    sheetHtml = `
+      ${letterheadHtml}
+      <div class="space-y-4 pt-3 text-xs leading-relaxed text-slate-800">
+        <div class="border-b border-slate-200 pb-2">
+          <h2 class="text-sm font-black text-slate-900 uppercase tracking-wide">Non-Disclosure Agreement (NDA) &amp; Confidentiality Deed</h2>
+          <p class="text-[11px] text-slate-500">Between: Phoenix Tech Solutions Pvt Ltd and <strong>${escapeHtml(profile.name)}</strong></p>
+        </div>
+
+        <p>This Non-Disclosure Agreement governs confidential information disclosed between Phoenix Tech Solutions Private Limited and the undersigned employee:</p>
+
+        <div class="space-y-2 text-[11px] text-slate-700">
+          <p><strong>1. Scope:</strong> "Confidential Information" encompasses proprietary software code, API endpoints, customer databases, sales pipeline metrics, pricing algorithms, and corporate business plans.</p>
+          <p><strong>2. Duty of Care:</strong> The employee agrees to hold all confidential information in strict trust and not disclose such information to any third party without express prior written approval from Founder Pranav Bansode.</p>
+          <p><strong>3. Term:</strong> The obligations of confidentiality shall remain in full force during employment and continue for a period of two (2) years following separation.</p>
+          <p><strong>4. Governing Jurisdiction:</strong> This Agreement shall be construed and governed in accordance with the laws of India, under the jurisdiction of courts in Pune, Maharashtra.</p>
+        </div>
+
+        ${signatureFooterHtml}
+      </div>
+    `;
+  } else {
+    // Joining Record / Master Statutory Dossier / Founder Corporate Records
+    sheetHtml = `
+      ${letterheadHtml}
+      <div class="space-y-4 pt-3 text-xs leading-relaxed text-slate-800">
+        <div class="border-b border-slate-200 pb-2">
+          <h2 class="text-sm font-black text-slate-900 uppercase tracking-wide">Statutory Personnel Master Record &bull; Corporate Registry</h2>
+          <p class="text-[11px] text-slate-500">Document: <strong>${escapeHtml(docMeta.name)}</strong></p>
+        </div>
+
+        <!-- Master Data Table -->
+        <div class="rounded-xl border border-slate-200 overflow-hidden my-3">
+          <table class="w-full text-[11px]">
+            <tbody class="divide-y divide-slate-100">
+              <tr>
+                <td class="p-2.5 font-bold text-slate-500 w-1/3 bg-slate-50">Personnel Full Name</td>
+                <td class="p-2.5 font-extrabold text-slate-900">${escapeHtml(profile.name)}</td>
+              </tr>
+              <tr>
+                <td class="p-2.5 font-bold text-slate-500 bg-slate-50">Employee Code / DIN</td>
+                <td class="p-2.5 font-mono font-bold text-slate-900">${escapeHtml(profile.empId)}</td>
+              </tr>
+              <tr>
+                <td class="p-2.5 font-bold text-slate-500 bg-slate-50">Designation &amp; Department</td>
+                <td class="p-2.5 text-slate-900">${escapeHtml(profile.designation)} &bull; ${escapeHtml(profile.department)}</td>
+              </tr>
+              <tr>
+                <td class="p-2.5 font-bold text-slate-500 bg-slate-50">Tax Identity (PAN)</td>
+                <td class="p-2.5 font-mono text-slate-900">${escapeHtml(profile.pan)} (Verified Indian Tax ID)</td>
+              </tr>
+              <tr>
+                <td class="p-2.5 font-bold text-slate-500 bg-slate-50">Payroll Bank Account</td>
+                <td class="p-2.5 font-mono text-slate-900">${escapeHtml(profile.bankName)} &bull; ${escapeHtml(profile.bankAccount)} (${escapeHtml(profile.ifsc)})</td>
+              </tr>
+              <tr>
+                <td class="p-2.5 font-bold text-slate-500 bg-slate-50">Official Email &amp; Phone</td>
+                <td class="p-2.5 text-slate-900">${escapeHtml(profile.email)} &bull; ${escapeHtml(profile.phone)}</td>
+              </tr>
+              <tr>
+                <td class="p-2.5 font-bold text-slate-500 bg-slate-50">Date of Joining / Confirmation</td>
+                <td class="p-2.5 text-slate-900">${escapeHtml(profile.joiningDate)} &bull; Confirmed: ${escapeHtml(profile.confirmationDate)}</td>
+              </tr>
+              <tr>
+                <td class="p-2.5 font-bold text-slate-500 bg-slate-50">Company CIN &amp; Jurisdiction</td>
+                <td class="p-2.5 text-slate-900">U72900PN2026PTC123456 &bull; Registrar of Companies (RoC Pune)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p class="text-[11px] text-slate-500 leading-relaxed">
+          This record confirms that the personnel credentials above are verified, authenticated, and cataloged in the statutory register of Phoenix Tech Solutions Private Limited in compliance with Section 88 of the Companies Act, 2013.
+        </p>
+
+        ${signatureFooterHtml}
+      </div>
+    `;
+  }
+
+  paperArea.innerHTML = sheetHtml;
+  modal.classList.remove('hidden');
+};
+
+function renderMyProfileSection(role) {
+  const r = role || STATE.activeRole || 'pranav';
+  const profile = getEmployeeProfile(r);
+  const isFounder = r === 'pranav';
+  const struct = EMPLOYEE_DOCUMENTS_STRUCTURE[r] || EMPLOYEE_DOCUMENTS_STRUCTURE.aryan;
+  const isInFolder = STATE.currentDocFolder === 'salary_slips_folder';
+  const displayedItems = isInFolder ? (struct.salary_slips_folder || []) : (struct.root || []);
+
+  return `
+    <div class="space-y-6">
+      <!-- 1. Header Profile & Identification Card -->
+      <div class="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
+          <div class="flex items-center gap-4">
+            <div class="w-16 h-16 rounded-2xl bg-[#026047] text-[#fffde8] flex items-center justify-center font-black text-2xl shadow-sm">
+              ${profile.empId.slice(0, 2)}
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <h2 class="text-xl font-black text-slate-900 dark:text-white">${escapeHtml(profile.name)}</h2>
+                <span class="px-2 py-0.5 rounded font-mono text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                  EMP ID: ${escapeHtml(profile.empId)}
+                </span>
+              </div>
+              <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">${escapeHtml(profile.designation)} &bull; ${escapeHtml(profile.department)}</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Official Personnel Credentials Grid -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+          <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800">
+            <span class="text-[10px] text-slate-400 font-bold uppercase block">Date of Joining</span>
+            <div class="font-extrabold text-slate-900 dark:text-white mt-0.5">${escapeHtml(profile.joiningDate || '—')}</div>
+            <div class="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold mt-0.5">Confirmed: ${escapeHtml(profile.confirmationDate || '—')}</div>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800">
+            <div class="flex items-center justify-between">
+              <span class="text-[10px] text-slate-400 font-bold uppercase block">Official Email</span>
+              <button onclick="openPortfolioSettingsModal()" class="text-[10px] text-[#026047] dark:text-emerald-400 font-bold hover:underline cursor-pointer">Edit</button>
+            </div>
+            <div class="font-mono font-bold text-slate-900 dark:text-white mt-0.5 truncate">${profile.email ? escapeHtml(profile.email) : '<span class="text-slate-400 italic font-normal">—</span>'}</div>
+            <div class="text-[10px] text-slate-400 mt-0.5">${profile.phone ? escapeHtml(profile.phone) : '<span class="italic font-normal">—</span>'}</div>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800">
+            <div class="flex items-center justify-between">
+              <span class="text-[10px] text-slate-400 font-bold uppercase block">Tax &amp; Identity (PAN)</span>
+              <button onclick="openPortfolioSettingsModal()" class="text-[10px] text-[#026047] dark:text-emerald-400 font-bold hover:underline cursor-pointer">Edit</button>
+            </div>
+            <div class="font-mono font-bold text-slate-900 dark:text-white mt-0.5">${profile.pan ? escapeHtml(profile.pan) : '<span class="text-slate-400 italic font-normal">—</span>'}</div>
+            <div class="text-[10px] text-slate-400 mt-0.5">Permanent Account Number</div>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800">
+            <div class="flex items-center justify-between">
+              <span class="text-[10px] text-slate-400 font-bold uppercase block">Payroll Bank Account</span>
+              <button onclick="openPortfolioSettingsModal()" class="text-[10px] text-[#026047] dark:text-emerald-400 font-bold hover:underline cursor-pointer">Edit</button>
+            </div>
+            <div class="font-bold text-slate-900 dark:text-white mt-0.5">${profile.bankName ? escapeHtml(profile.bankName) : '<span class="text-slate-400 italic font-normal">—</span>'}</div>
+            <div class="font-mono text-[10px] text-slate-500 truncate">${(profile.bankAccount || profile.ifsc) ? `${escapeHtml(profile.bankAccount || '—')} (${escapeHtml(profile.ifsc || '—')})` : '<span class="text-slate-400 italic font-normal">—</span>'}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Official Documents: Windows File Explorer List View -->
+      <div class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+        <div class="px-5 py-3.5 bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            ${isInFolder ? `
+              <button onclick="closeDocumentsFolder()" class="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-xs">
+                <span>←</span> Back to Official Documents
+              </button>
+              <span class="text-slate-400 text-xs">/</span>
+              <span class="text-amber-500 text-base">📁</span>
+              <h3 class="font-bold text-xs uppercase tracking-wider text-slate-800 dark:text-slate-200">${isFounder ? 'Salary Slips & Executive Drawings' : 'Salary Slips'}</h3>
+            ` : `
+              <span class="text-amber-500 text-base">📁</span>
+              <h3 class="font-bold text-xs uppercase tracking-wider text-slate-700 dark:text-slate-300">Official Personnel Documents</h3>
+            `}
+          </div>
+          <span class="text-[11px] text-slate-400 font-mono">${isInFolder ? `${displayedItems.length} monthly slips` : `Total Items: ${displayedItems.length}`}</span>
+        </div>
+
+        <div class="divide-y divide-slate-100 dark:divide-slate-800/80">
+          ${displayedItems.map((doc) => {
+            if (doc.isFolder) {
+              return `
+                <div onclick="openDocumentsFolder('${doc.id}')"
+                  class="flex items-center justify-between px-4 sm:px-6 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition cursor-pointer group">
+                  <div class="flex items-center gap-3.5 min-w-0 pr-4">
+                    <!-- Warm Amber Folder Icon matching Windows Explorer list format -->
+                    <svg class="w-5 h-5 shrink-0 text-amber-500 fill-amber-400/90" viewBox="0 0 24 24">
+                      <path d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h3.379c.464 0 .91.184 1.238.513l.883.882c.328.329.774.513 1.238.513H19.5a2.25 2.25 0 012.25 2.25v.75m-19.5 0v5.25A2.25 2.25 0 004.5 21h15a2.25 2.25 0 002.25-2.25v-5.25m-19.5 0h19.5" />
+                    </svg>
+                    <span class="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200 truncate group-hover:text-[#026047] dark:group-hover:text-emerald-400">
+                      ${escapeHtml(doc.name)}
+                    </span>
+                    <span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-300 font-semibold border border-amber-500/20 shrink-0">
+                      Folder (${doc.itemCount} months)
+                    </span>
+                  </div>
+                  <div class="text-[11px] sm:text-xs text-slate-400 dark:text-slate-400 font-normal shrink-0 tracking-tight">
+                    Date modified: ${escapeHtml(doc.dateModified)}
+                  </div>
+                </div>
+              `;
+            } else {
+              return `
+                <div onclick="openPaperDocumentModal('${doc.id}', '${r}')"
+                  class="flex items-center justify-between px-4 sm:px-6 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition cursor-pointer group">
+                  <div class="flex items-center gap-3.5 min-w-0 pr-4">
+                    <span class="text-base shrink-0">${doc.type === 'word' ? '📝' : '📄'}</span>
+                    <span class="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200 truncate group-hover:text-[#026047] dark:group-hover:text-emerald-400">
+                      ${escapeHtml(doc.name)}
+                    </span>
+                  </div>
+                  <div class="text-[11px] sm:text-xs text-slate-400 dark:text-slate-400 font-normal shrink-0 tracking-tight">
+                    Date modified: ${escapeHtml(doc.dateModified)}
+                  </div>
+                </div>
+              `;
+            }
+          }).join('')}
+        </div>
+      </div>
+
+      <!-- 3. Corporate Statutory Details Card -->
+      <div class="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-2 text-xs">
+        <div class="flex items-center justify-between">
+          <span class="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+            <span>🏛️</span> Phoenix Tech Solutions Private Limited &bull; Statutory Registry
+          </span>
+          <span class="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">Registered Entity (MCA)</span>
+        </div>
+        <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+          Corporate Identification Number (CIN): <strong class="font-mono text-slate-700 dark:text-slate-300">U72900PN2026PTC123456</strong> &bull;
+          Registered Office: 11-B, Lane No, opposite Etasha Society, Bharat Colony, Sayad Nagar, Hadapsar, Pune, Maharashtra 411028 &bull;
+          Sole Executive Signatory: <strong class="text-slate-700 dark:text-slate-300">Pranav Bansode (Founder &amp; Director)</strong>
+        </p>
+      </div>
+    </div>
+  `;
+}
+window.renderMyProfileSection = renderMyProfileSection;
+
+function renderMyProfileTab() {
+  const container = document.getElementById('my-profile-container');
+  if (!container) return;
+  const activeUser = STATE.activeRole || 'pranav';
+  container.innerHTML = renderMyProfileSection(activeUser);
+}
+window.renderMyProfileTab = renderMyProfileTab;
 
 function setupNavigation() {
   renderSidebarNav(STATE.currentTab);
@@ -1103,14 +2780,19 @@ function renderSidebarNav(activeTab) {
   if (!nav) return;
 
   const currentRole = STATE.activeRole || 'pranav';
-  activeTab = normalizeTabId(activeTab || STATE.currentTab || (currentRole === 'pranav' ? 'dashboard-overview' : 'employee-dashboard'));
+  activeTab = normalizeTabId(activeTab || STATE.currentTab || ((currentRole === 'pranav' || currentRole === 'arshad') ? 'dashboard-overview' : 'employee-dashboard'));
 
   // Calculate live counters for pending items
   const pendingInflowsCount = (STATE.income || []).filter((i) => i.status === 'pending' || i.status === 'pending_approval').length;
   const pendingExpensesCount = (STATE.expenses || []).filter((e) => e.status === 'pending_approval').length;
   const pendingPayoutsCount = (STATE.team || []).filter((m) => (m.pendingCompensation || 0) > 0).length;
-  const pendingTasksCount = (STATE.assignedTasks || []).filter((t) => t.status === 'review_pending').length;
-  const pendingLeadsCount = (STATE.leads || []).filter((l) => l.status === 'submitted_to_founder' || l.status === 'awaiting_founder_market_approval').length;
+  const pendingTasksCount = (STATE.assignedTasks || []).filter((t) => {
+    if (t.status !== 'review_pending') return false;
+    const linkedLead = t.leadId ? (STATE.leads || []).find((l) => l.id === t.leadId) : null;
+    if (linkedLead && (linkedLead.status === 'forwarded_to_arshad' || linkedLead.status === 'commercial_in_progress' || linkedLead.status === 'allocated_to_vivek' || linkedLead.status === 'tech_in_progress')) return false;
+    return true;
+  }).length;
+  const pendingLeadsCount = (STATE.leads || []).filter((l) => l.status === 'submitted_to_founder' || l.status === 'submitted_to_arshad' || l.status === 'awaiting_founder_market_approval').length;
   const totalPendingApprovals = pendingInflowsCount + pendingExpensesCount + pendingPayoutsCount + pendingTasksCount + pendingLeadsCount;
 
   // Real-time notification bell sync
@@ -1125,58 +2807,55 @@ function renderSidebarNav(activeTab) {
   ).length;
 
   if (currentRole === 'pranav') {
-    // Founder: Full executive options organized logically
+    // Founder: Strictly high-level tracking of all work, projects and sales
     nav.innerHTML = `
       <!-- Section: Executive Governance -->
       <div class="px-3 pt-1 pb-1 text-[10px] font-bold uppercase tracking-wider text-[#fffde8]/60 flex items-center gap-1.5">
-        <span>🏛️</span> Executive Governance
+        <span>🏛️</span> Executive Tracking
       </div>
 
       <button data-nav="dashboard-overview" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl ${activeTab === 'dashboard-overview' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
         <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
         <div class="flex-1 min-w-0">
-          <div class="truncate font-black">1. Dashboard Overview</div>
-          <div class="text-[9px] opacity-75 truncate font-normal">Finances, Inflows & Solvency</div>
+          <div class="truncate font-bold">1. Dashboard Overview</div>
+          <div class="text-[9px] opacity-75 truncate font-normal">Finances, Inflows &amp; Solvency</div>
         </div>
       </button>
 
-      <button data-nav="approvals" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl ${activeTab === 'approvals' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
-        <span class="text-sm">👑</span>
-        <div class="flex-1 min-w-0">
-          <div class="truncate font-black flex items-center justify-between">
-            <span>2. Approval</span>
-            <span class="px-1.5 py-0.5 rounded-full text-[9px] font-black ${totalPendingApprovals > 0 ? 'bg-amber-400 text-slate-900 animate-pulse' : 'bg-white/20 text-white'}">${totalPendingApprovals}</span>
-          </div>
-          <div class="text-[9px] opacity-75 truncate font-normal">One-row Founder approvals</div>
-        </div>
-      </button>
-
-      <!-- Section: Products & Operations -->
+      <!-- Section: Products & Delivery Tracking -->
       <div class="px-3 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-[#fffde8]/60 flex items-center gap-1.5 border-t border-[#024d39]/80 mt-1">
-        <span>🚀</span> Products & Operations
+        <span>🚀</span> Projects &amp; Delivery Tracking
       </div>
 
       <button data-nav="projects" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl ${activeTab === 'projects' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
         <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
         <div class="flex-1 min-w-0">
-          <div class="truncate font-bold">3. Projects</div>
-          <div class="text-[9px] opacity-75 truncate font-normal">Products, Scopes & Live Financials</div>
+          <div class="truncate font-bold">2. Live Projects Tracker</div>
+          <div class="text-[9px] opacity-75 truncate font-normal">Track all active company projects</div>
         </div>
       </button>
 
-      <button data-nav="assign-projects" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl ${activeTab === 'assign-projects' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
-        <span class="text-sm">📌</span>
+      <button data-nav="completed-projects" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl ${activeTab === 'completed-projects' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
+        <span class="text-sm">🏆</span>
         <div class="flex-1 min-w-0">
-          <div class="truncate font-bold">4. Assign Projects</div>
-          <div class="text-[9px] opacity-75 truncate font-normal">Share work with employees</div>
+          <div class="truncate font-bold">3. Completed Projects</div>
+          <div class="text-[9px] opacity-75 truncate font-normal">Delivered systems, repos &amp; sign-offs</div>
         </div>
       </button>
 
       <button data-nav="sales-done" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl ${activeTab === 'sales-done' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
         <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
         <div class="flex-1 min-w-0">
-          <div class="truncate font-bold">5. Sales Done</div>
-          <div class="text-[9px] opacity-75 truncate font-normal">Product Sales & Deals Done</div>
+          <div class="truncate font-bold">4. Sales Done</div>
+          <div class="text-[9px] opacity-75 truncate font-normal">Closed client deals &amp; revenue</div>
+        </div>
+      </button>
+
+      <button data-nav="employee-dashboard" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl ${activeTab === 'employee-dashboard' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
+        <span class="text-sm">👥</span>
+        <div class="flex-1 min-w-0">
+          <div class="truncate font-bold">5. Employee Work Tracker</div>
+          <div class="text-[9px] opacity-75 truncate font-normal">Track all employee tasks &amp; deliverables</div>
         </div>
       </button>
 
@@ -1185,91 +2864,115 @@ function renderSidebarNav(activeTab) {
         <span>💼</span> Financial Controls
       </div>
 
+      <button data-nav="financial-summary" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl ${activeTab === 'financial-summary' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
+        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        <div class="flex-1 min-w-0">
+          <div class="truncate font-bold">6. Financial Summary</div>
+          <div class="text-[9px] opacity-75 truncate font-normal">Monthly Performance &amp; P&L</div>
+        </div>
+      </button>
+    `;
+  } else if (currentRole === 'arshad') {
+    // Arshad: Co-Founder & CTO (approvals, commercial operations, project assignments)
+    nav.innerHTML = `
+      <!-- Section: Executive Hub -->
+      <div class="px-3 pt-1 pb-1 text-[10px] font-bold uppercase tracking-wider text-[#fffde8]/60 flex items-center gap-1.5">
+        <span>🤝</span> Co-Founder &amp; CTO Hub
+      </div>
+
+      <button data-nav="dashboard-overview" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl ${activeTab === 'dashboard-overview' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
+        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+        <div class="flex-1 min-w-0">
+          <div class="truncate font-bold">1. Dashboard Overview</div>
+          <div class="text-[9px] opacity-75 truncate font-normal">Company Finances &amp; Solvency</div>
+        </div>
+      </button>
+
+      <button data-nav="approvals" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl ${activeTab === 'approvals' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
+        <span class="text-sm">👑</span>
+        <div class="flex-1 min-w-0">
+          <div class="truncate font-bold flex items-center justify-between">
+            <span>2. Approval Queue</span>
+            <span class="px-1.5 py-0.5 rounded-full text-[9px] font-black ${totalPendingApprovals > 0 ? 'bg-amber-400 text-slate-900 animate-pulse' : 'bg-white/20 text-white'}">${totalPendingApprovals}</span>
+          </div>
+          <div class="text-[9px] opacity-75 truncate font-normal">Leads, Inflows &amp; Tech Clearances</div>
+        </div>
+      </button>
+
+      <button data-nav="employee-dashboard" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl ${activeTab === 'employee-dashboard' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
+        <span class="text-sm">💼</span>
+        <div class="flex-1 min-w-0">
+          <div class="truncate font-bold">3. Commercial &amp; CTO Workspace</div>
+          <div class="text-[9px] opacity-75 truncate font-normal">Departmental Scope &amp; Deliverables</div>
+        </div>
+      </button>
+
+      <button data-nav="assign-projects" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl ${activeTab === 'assign-projects' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
+        <span class="text-sm">📌</span>
+        <div class="flex-1 min-w-0">
+          <div class="truncate font-bold">4. Assign Projects / Delegate</div>
+          <div class="text-[9px] opacity-75 truncate font-normal">Delegate work to Vivek &amp; Aryan</div>
+        </div>
+      </button>
+
+      <!-- Section: Products & Sales Execution -->
+      <div class="px-3 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-[#fffde8]/60 flex items-center gap-1.5 border-t border-[#024d39]/80 mt-1">
+        <span>🚀</span> Commercial &amp; Project Delivery
+      </div>
+
+      <button data-nav="projects" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl ${activeTab === 'projects' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
+        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+        <div class="flex-1 min-w-0">
+          <div class="truncate font-bold">5. Live Projects Tracker</div>
+          <div class="text-[9px] opacity-75 truncate font-normal">Products, Scopes &amp; Live Financials</div>
+        </div>
+      </button>
+
+      <button data-nav="completed-projects" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl ${activeTab === 'completed-projects' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
+        <span class="text-sm">🏆</span>
+        <div class="flex-1 min-w-0">
+          <div class="truncate font-bold">6. Completed Projects</div>
+          <div class="text-[9px] opacity-75 truncate font-normal">Delivered client solutions</div>
+        </div>
+      </button>
+
+      <button data-nav="sales-done" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl ${activeTab === 'sales-done' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
+        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
+        <div class="flex-1 min-w-0">
+          <div class="truncate font-bold">7. Sales Done</div>
+          <div class="text-[9px] opacity-75 truncate font-normal">Closed client deals &amp; sales</div>
+        </div>
+      </button>
+
       <button data-nav="expense-management" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl ${activeTab === 'expense-management' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
         <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
         <div class="flex-1 min-w-0">
-          <div class="truncate font-bold">6. Expense Management</div>
-          <div class="text-[9px] opacity-75 truncate font-normal">Director Approvals & Outflows</div>
+          <div class="truncate font-bold">8. Expense Management</div>
+          <div class="text-[9px] opacity-75 truncate font-normal">Approvals &amp; Cost Control</div>
         </div>
       </button>
 
       <button data-nav="financial-summary" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl ${activeTab === 'financial-summary' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
         <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
         <div class="flex-1 min-w-0">
-          <div class="truncate font-bold">7. Financial Summary</div>
-          <div class="text-[9px] opacity-75 truncate font-normal">Monthly Performance & P&L</div>
-        </div>
-      </button>
-    `;
-  } else if (currentRole === 'arshad') {
-    // Arshad: Marketing Workspace with Allocated Work
-    nav.innerHTML = `
-      <!-- Section: Personal Hub -->
-      <div class="px-3 pt-1 pb-1 text-[10px] font-bold uppercase tracking-wider text-[#fffde8]/60 flex items-center gap-1.5">
-        <span>💼</span> Personal Workspace
-      </div>
-
-      <button data-nav="employee-dashboard" class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl ${activeTab === 'employee-dashboard' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
-        <span class="text-sm">💼</span>
-        <div class="flex-1 min-w-0">
-          <div class="truncate font-black">1. My Workspace & Comp</div>
-          <div class="text-[9px] opacity-75 truncate font-normal">Compensation & B2B Deliverables</div>
-        </div>
-      </button>
-
-      <button data-nav="allocated-work" class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl ${activeTab === 'allocated-work' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
-        <span class="text-sm">📌</span>
-        <div class="flex-1 min-w-0">
-          <div class="truncate font-black flex items-center justify-between">
-            <span>2. Allocated Work</span>
-            <span class="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-white/20 text-white">${myAssignedTasksCount}</span>
-          </div>
-          <div class="text-[9px] opacity-75 truncate font-normal">Tasks assigned by Founder</div>
-        </div>
-      </button>
-
-      <!-- Section: Marketing & Deals -->
-      <div class="px-3 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-[#fffde8]/60 flex items-center gap-1.5 border-t border-[#024d39]/80 mt-1">
-        <span>📈</span> Marketing & Commercial
-      </div>
-
-      <button data-nav="projects" class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl ${activeTab === 'projects' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
-        <span class="text-sm">📁</span>
-        <div class="flex-1 min-w-0">
-          <div class="truncate font-bold">3. Marketing Projects</div>
-          <div class="text-[9px] opacity-75 truncate font-normal">LeadX & Smart Review Scopes</div>
-        </div>
-      </button>
-
-      <button data-nav="expense-management" class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl ${activeTab === 'expense-management' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
-        <span class="text-sm">💳</span>
-        <div class="flex-1 min-w-0">
-          <div class="truncate font-bold">4. My Submitted Expenses</div>
-          <div class="text-[9px] opacity-75 truncate font-normal">Marketing Outflows & Status</div>
-        </div>
-      </button>
-
-      <button onclick="openNewIncomeModal()" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-emerald-800/80 hover:bg-emerald-700 text-[#fffde8] font-bold transition-all text-left border border-[#fffde8]/20 mt-2">
-        <span class="text-sm">📥</span>
-        <div class="flex-1 min-w-0">
-          <div class="truncate font-bold">+ Enroll Client Deal</div>
-          <div class="text-[9px] opacity-75 truncate font-normal">Submit for Founder Approval</div>
+          <div class="truncate font-bold">9. Financial Summary</div>
+          <div class="text-[9px] opacity-75 truncate font-normal">Monthly Performance &amp; P&L</div>
         </div>
       </button>
     `;
   } else if (currentRole === 'aryan') {
-    // Aryan: Personal Workspace (clean, designation-free, real-time pipeline)
+    // Aryan: Research Lead (Pipeline, Intake, Intel)
     nav.innerHTML = `
-      <!-- Section: Personal Hub -->
+      <!-- Section: Research & Intelligence -->
       <div class="px-3 pt-1 pb-1 text-[10px] font-bold uppercase tracking-wider text-[#fffde8]/60 flex items-center gap-1.5">
-        <span>🎯</span> Personal Workspace
+        <span>🎯</span> Research Department
       </div>
 
       <button data-nav="employee-dashboard" class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl ${activeTab === 'employee-dashboard' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
         <span class="text-sm">🎯</span>
         <div class="flex-1 min-w-0">
-          <div class="truncate font-black">1. My Workspace</div>
-          <div class="text-[9px] opacity-75 truncate font-normal">Personal Portfolio &amp; Deals</div>
+          <div class="truncate font-black">1. Workspace &amp; Market Intel</div>
+          <div class="text-[9px] opacity-75 truncate font-normal">Scouting Pipeline &amp; Client Deals</div>
         </div>
       </button>
 
@@ -1277,47 +2980,55 @@ function renderSidebarNav(activeTab) {
         <span class="text-sm">📌</span>
         <div class="flex-1 min-w-0">
           <div class="truncate font-black flex items-center justify-between">
-            <span>2. Allocated Work</span>
+            <span>2. Lead Pipeline &amp; Intake</span>
             <span class="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-white/20 text-white">${aryanAllocatedCount}</span>
           </div>
-          <div class="text-[9px] opacity-75 truncate font-normal">Allocated Work &amp; Created Leads</div>
+          <div class="text-[9px] opacity-75 truncate font-normal">Active Leads Scouted</div>
+        </div>
+      </button>
+
+      <button data-nav="sales-done" class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl ${activeTab === 'sales-done' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
+        <span class="text-sm">💼</span>
+        <div class="flex-1 min-w-0">
+          <div class="truncate font-bold">3. Executed Deals &amp; Sales</div>
+          <div class="text-[9px] opacity-75 truncate font-normal">Closed Client Deals</div>
         </div>
       </button>
 
       <!-- Section: Products & Scout Expenses -->
       <div class="px-3 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-[#fffde8]/60 flex items-center gap-1.5 border-t border-[#024d39]/80 mt-1">
-        <span>📁</span> Products & Scout Expenses
+        <span>📁</span> Products &amp; Scout Expenses
       </div>
 
       <button data-nav="projects" class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl ${activeTab === 'projects' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
         <span class="text-sm">📁</span>
         <div class="flex-1 min-w-0">
-          <div class="truncate font-bold">3. Client Solutions</div>
-          <div class="text-[9px] opacity-75 truncate font-normal">LeadX & Smart Review Scopes</div>
+          <div class="truncate font-bold">4. Client Solutions</div>
+          <div class="text-[9px] opacity-75 truncate font-normal">LeadX &amp; Smart Review Scopes</div>
         </div>
       </button>
 
       <button data-nav="expense-management" class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl ${activeTab === 'expense-management' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
         <span class="text-sm">💳</span>
         <div class="flex-1 min-w-0">
-          <div class="truncate font-bold">4. Scout Expenses</div>
-          <div class="text-[9px] opacity-75 truncate font-normal">Outreach & Prospecting Costs</div>
+          <div class="truncate font-bold">5. Scout Expenses</div>
+          <div class="text-[9px] opacity-75 truncate font-normal">Outreach &amp; Prospecting Costs</div>
         </div>
       </button>
     `;
   } else {
     // Vivek: Engineering Workspace with Allocated Work
     nav.innerHTML = `
-      <!-- Section: Personal Hub -->
+      <!-- Section: Engineering & Systems -->
       <div class="px-3 pt-1 pb-1 text-[10px] font-bold uppercase tracking-wider text-[#fffde8]/60 flex items-center gap-1.5">
-        <span>💻</span> Personal Workspace
+        <span>💻</span> Technical Department
       </div>
 
       <button data-nav="employee-dashboard" class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl ${activeTab === 'employee-dashboard' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
         <span class="text-sm">💻</span>
         <div class="flex-1 min-w-0">
-          <div class="truncate font-black">1. My Workspace & Comp</div>
-          <div class="text-[9px] opacity-75 truncate font-normal">Compensation & Tech Deliverables</div>
+          <div class="truncate font-black">1. Workspace &amp; Deliverables</div>
+          <div class="text-[9px] opacity-75 truncate font-normal">Architecture &amp; Tech Deliverables</div>
         </div>
       </button>
 
@@ -1325,23 +3036,23 @@ function renderSidebarNav(activeTab) {
         <span class="text-sm">📌</span>
         <div class="flex-1 min-w-0">
           <div class="truncate font-black flex items-center justify-between">
-            <span>2. Allocated Work</span>
+            <span>2. Allocated Tasks &amp; Repo</span>
             <span class="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-white/20 text-white">${myAssignedTasksCount}</span>
           </div>
-          <div class="text-[9px] opacity-75 truncate font-normal">Tasks assigned by Founder</div>
+          <div class="text-[9px] opacity-75 truncate font-normal">Assigned Technical Tasks</div>
         </div>
       </button>
 
-      <!-- Section: Engineering & Systems -->
+      <!-- Section: Tech & Infrastructure -->
       <div class="px-3 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-[#fffde8]/60 flex items-center gap-1.5 border-t border-[#024d39]/80 mt-1">
-        <span>🛠️</span> Tech & Infrastructure
+        <span>🛠️</span> Tech &amp; Infrastructure
       </div>
 
       <button data-nav="projects" class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl ${activeTab === 'projects' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
         <span class="text-sm">📁</span>
         <div class="flex-1 min-w-0">
-          <div class="truncate font-bold">3. Engineering Projects</div>
-          <div class="text-[9px] opacity-75 truncate font-normal">Architecture & Systems Stack</div>
+          <div class="truncate font-bold">3. Live Projects Tracker</div>
+          <div class="text-[9px] opacity-75 truncate font-normal">Architecture &amp; Systems Stack</div>
         </div>
       </button>
 
@@ -1349,7 +3060,7 @@ function renderSidebarNav(activeTab) {
         <span class="text-sm">💳</span>
         <div class="flex-1 min-w-0">
           <div class="truncate font-bold">4. Infrastructure Expenses</div>
-          <div class="text-[9px] opacity-75 truncate font-normal">Cloud, Server & Tooling Costs</div>
+          <div class="text-[9px] opacity-75 truncate font-normal">Cloud, Server &amp; Tooling Costs</div>
         </div>
       </button>
     `;
@@ -1367,6 +3078,12 @@ function renderSidebarNav(activeTab) {
 function switchTab(tabId, subView = null) {
   if (!requireAuth('switch views')) return;
 
+  if (tabId === 'my-profile' || tabId === 'profile') {
+    tabId = 'my-profile';
+  } else if (tabId === 'employee-dashboard' || tabId === 'workspace') {
+    tabId = 'employee-dashboard';
+  }
+
   if (tabId === 'project-finance') {
     STATE.projectSubView = 'finance';
     tabId = 'projects';
@@ -1375,24 +3092,24 @@ function switchTab(tabId, subView = null) {
   }
   let normalized = normalizeTabId(tabId);
 
-  // Security Gate: Non-founders cannot access executive financial tabs
+  // Security Gate: Non-executive users cannot access executive financial tabs
   if (
     STATE.activeRole !== 'pranav' &&
+    STATE.activeRole !== 'arshad' &&
     (normalized === 'dashboard-overview' ||
       normalized === 'founder-dashboard' ||
       normalized === 'approvals' ||
       normalized === 'assign-projects' ||
-      normalized === 'sales-done' ||
       normalized === 'project-finance' ||
       normalized === 'financial-summary')
   ) {
-    showToast('Confidential Section: Executive controls are reserved for Founder & Director Pranav Bansode.');
+    showToast('Confidential Section: Executive controls are reserved for Leadership.');
     normalized = 'employee-dashboard';
   }
 
-  // Founder shouldn't land on employee-specific allocated work view
-  if (STATE.activeRole === 'pranav' && normalized === 'allocated-work') {
-    normalized = 'assign-projects';
+  // Founder has tracking role and does not have allocated-work or approval queue
+  if (STATE.activeRole === 'pranav' && (normalized === 'allocated-work' || normalized === 'approvals')) {
+    normalized = 'dashboard-overview';
   }
 
   STATE.currentTab = normalized;
@@ -1409,6 +3126,30 @@ function switchTab(tabId, subView = null) {
 }
 window.switchTab = switchTab;
 
+window.toggleProfileDropdown = function () {
+  const dd = document.getElementById('topbar-profile-dropdown');
+  if (dd) dd.classList.toggle('hidden');
+};
+
+window.closeProfileDropdown = function () {
+  const dd = document.getElementById('topbar-profile-dropdown');
+  if (dd) dd.classList.add('hidden');
+};
+
+window.openMyProfileFromTop = function () {
+  closeProfileDropdown();
+  switchTab('my-profile');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+};
+
+document.addEventListener('click', (e) => {
+  const profileWrapper = document.getElementById('topbar-profile-wrapper');
+  const profileDropdown = document.getElementById('topbar-profile-dropdown');
+  if (profileWrapper && profileDropdown && !profileWrapper.contains(e.target)) {
+    profileDropdown.classList.add('hidden');
+  }
+});
+
 function updateRoleDisplay() {
   if (!STATE.activeRole) return;
   const nameEl = document.getElementById('founder-name');
@@ -1419,6 +3160,38 @@ function updateRoleDisplay() {
   const currentRoleLabel = document.getElementById('current-role-label');
   const topbarPill = document.getElementById('topbar-founder-pill');
 
+  // Topbar round profile avatar and dropdown synchronization
+  const topAvatarCircle = document.getElementById('topbar-avatar-circle');
+  const topProfileName = document.getElementById('topbar-profile-name');
+  const topProfileRole = document.getElementById('topbar-profile-role-badge');
+  const dropAvatar = document.getElementById('topbar-dropdown-avatar');
+  const dropName = document.getElementById('topbar-dropdown-name');
+  const dropRole = document.getElementById('topbar-dropdown-role');
+  const dropEmpId = document.getElementById('topbar-dropdown-empid');
+
+  const profileData = {
+    pranav: { initials: 'PB', name: 'Pranav Bansode', role: 'Founder & Director', empId: 'PB-01', bg: 'bg-[#026047]' },
+    arshad: { initials: 'AS', name: 'Arshad Shaikh', role: 'Co-Founder & CTO', empId: 'AS-02', bg: 'bg-blue-600' },
+    aryan: { initials: 'AB', name: 'Aryan Bhore', role: 'Research Lead', empId: 'AB-04', bg: 'bg-emerald-600' },
+    vivek: { initials: 'VG', name: 'Vivek Gajdhane', role: 'Technical Lead', empId: 'VG-03', bg: 'bg-purple-600' }
+  };
+  const activeProf = profileData[STATE.activeRole] || profileData.pranav;
+
+  if (topAvatarCircle) {
+    topAvatarCircle.textContent = activeProf.initials;
+    topAvatarCircle.className = `w-8 h-8 rounded-full ${activeProf.bg} text-[#fffde8] flex items-center justify-center font-black text-xs shadow-xs`;
+  }
+  if (topProfileName) topProfileName.textContent = activeProf.name;
+  if (topProfileRole) topProfileRole.textContent = activeProf.role;
+
+  if (dropAvatar) {
+    dropAvatar.textContent = activeProf.initials;
+    dropAvatar.className = `w-11 h-11 rounded-full ${activeProf.bg} text-[#fffde8] flex items-center justify-center font-black text-base shadow-sm`;
+  }
+  if (dropName) dropName.textContent = activeProf.name;
+  if (dropRole) dropRole.textContent = activeProf.role;
+  if (dropEmpId) dropEmpId.textContent = `EMP ID: ${activeProf.empId}`;
+
   // Topbar quick action buttons
   const btnCsv = document.getElementById('btn-topbar-csv');
   const btnIncome = document.getElementById('btn-topbar-income');
@@ -1426,7 +3199,7 @@ function updateRoleDisplay() {
   const btnSignOut = document.getElementById('btn-topbar-signout');
 
   if (STATE.activeRole === 'pranav') {
-    if (btnSignOut) btnSignOut.classList.remove('hidden');
+    if (btnSignOut) btnSignOut.classList.add('hidden');
     if (nameEl) nameEl.textContent = 'Pranav Bansode';
     if (avatarText) avatarText.textContent = 'PB';
     if (crownBadge) {
@@ -1441,13 +3214,13 @@ function updateRoleDisplay() {
       authBox.classList.remove('hidden');
       authBox.innerHTML = `
         <div class="flex items-center justify-between text-[#fffde8] font-bold">
-          <span class="opacity-75 text-[9px] uppercase tracking-wider">Executive Authority</span>
+          <span class="opacity-75 text-[9px] uppercase tracking-wider">Executive Tracking</span>
           <span class="flex items-center gap-1 text-[9px] text-emerald-300">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Sole Signatory
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Sole Director
           </span>
         </div>
         <p class="text-[10px] text-[#fffde8]/80 leading-tight">
-          Strategic Direction • Inflow Approvals • Financial Governance
+          High-Level Tracking • Solvency Reserves • Solvency Health
         </p>
       `;
     }
@@ -1456,7 +3229,7 @@ function updateRoleDisplay() {
       topbarPill.innerHTML = `
         <span class="w-2 h-2 rounded-full bg-[#026047] dark:bg-emerald-400 animate-pulse"></span>
         <span class="font-extrabold text-[#026047] dark:text-emerald-300">Pranav Bansode</span>
-        <span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-[#026047] text-[#fffde8]">👑 Founder / Director</span>
+        <span class="text-xs text-slate-500 dark:text-slate-400 font-medium">(Founder &amp; Director)</span>
       `;
     }
     if (btnCsv) btnCsv.classList.remove('hidden');
@@ -1468,7 +3241,7 @@ function updateRoleDisplay() {
     if (btnExpense) btnExpense.classList.remove('hidden');
 
   } else if (STATE.activeRole === 'arshad') {
-    if (btnSignOut) btnSignOut.classList.remove('hidden');
+    if (btnSignOut) btnSignOut.classList.add('hidden');
     if (nameEl) nameEl.textContent = 'Arshad Shaikh';
     if (avatarText) avatarText.textContent = 'AS';
     if (crownBadge) {
@@ -1476,48 +3249,48 @@ function updateRoleDisplay() {
       crownBadge.className = 'absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-blue-100 text-blue-800 flex items-center justify-center text-[10px] font-bold shadow ring-1 ring-blue-300';
     }
     if (desigBadge) {
-      desigBadge.innerHTML = 'CO-FOUNDER';
+      desigBadge.innerHTML = 'CO-FOUNDER & CTO';
       desigBadge.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-[#fffde8]/20 text-[#fffde8] border border-[#fffde8]/40';
     }
     if (authBox) {
       authBox.classList.remove('hidden');
       authBox.innerHTML = `
         <div class="flex items-center justify-between text-[#fffde8] font-bold">
-          <span class="opacity-75 text-[9px] uppercase tracking-wider">Departmental Scope</span>
-          <span class="text-[9px] text-blue-300">Business Planning</span>
+          <span class="opacity-75 text-[9px] uppercase tracking-wider">Executive Operations</span>
+          <span class="text-[9px] text-blue-300">Approvals &amp; Commercial</span>
         </div>
         <p class="text-[10px] text-[#fffde8]/80 leading-tight">
-          Marketing, Business Expansion & Pipeline Development
+          CTO Oversight • Lead Clearances • Deal Closures &amp; Sales
         </p>
       `;
     }
-    if (currentRoleLabel) currentRoleLabel.innerHTML = '🤝 Co-Founder';
+    if (currentRoleLabel) currentRoleLabel.innerHTML = '🤝 Co-Founder & CTO';
     if (topbarPill) {
       topbarPill.innerHTML = `
         <span class="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
         <span class="font-extrabold text-blue-700 dark:text-blue-300">Arshad Shaikh</span>
-        <span class="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300">🤝 Co-Founder</span>
+        <span class="text-xs text-slate-500 dark:text-slate-400 font-medium">(Co-Founder &amp; CTO)</span>
       `;
     }
-    if (btnCsv) btnCsv.classList.add('hidden');
+    if (btnCsv) btnCsv.classList.remove('hidden');
     if (btnIncome) {
       btnIncome.classList.remove('hidden');
-      btnIncome.textContent = '+ Enroll Deal';
+      btnIncome.textContent = '+ Income';
       btnIncome.onclick = window.openNewIncomeModal;
     }
     if (btnExpense) btnExpense.classList.remove('hidden');
 
   } else if (STATE.activeRole === 'aryan') {
     if (btnSignOut) btnSignOut.classList.add('hidden');
-    if (nameEl) nameEl.textContent = 'Aryan Bhore';
+    if (nameEl) nameEl.textContent = 'Research Lead - Aryan Bhore';
     if (avatarText) avatarText.textContent = 'AB';
     if (crownBadge) {
       crownBadge.textContent = '🎯';
       crownBadge.className = 'absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center text-[10px] font-bold shadow ring-1 ring-emerald-300';
     }
     if (desigBadge) {
-      desigBadge.innerHTML = 'RESEARCH LEAD';
-      desigBadge.className = 'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-[#fffde8]/20 text-[#fffde8] border border-[#fffde8]/40';
+      desigBadge.innerHTML = '';
+      desigBadge.className = 'hidden';
     }
     if (authBox) {
       authBox.innerHTML = '';
@@ -1527,8 +3300,8 @@ function updateRoleDisplay() {
     if (topbarPill) {
       topbarPill.innerHTML = `
         <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-        <span class="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-300/40">🎯 Research Lead</span>
         <span class="font-extrabold text-emerald-700 dark:text-emerald-300">Aryan Bhore</span>
+        <span class="text-xs text-slate-500 dark:text-slate-400 font-medium">(Research Lead)</span>
       `;
     }
     if (btnCsv) btnCsv.classList.add('hidden');
@@ -1540,7 +3313,7 @@ function updateRoleDisplay() {
     if (btnExpense) btnExpense.classList.remove('hidden');
 
   } else {
-    if (btnSignOut) btnSignOut.classList.remove('hidden');
+    if (btnSignOut) btnSignOut.classList.add('hidden');
     if (nameEl) nameEl.textContent = 'Vivek Gajdhane';
     if (avatarText) avatarText.textContent = 'VG';
     if (crownBadge) {
@@ -1568,7 +3341,7 @@ function updateRoleDisplay() {
       topbarPill.innerHTML = `
         <span class="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></span>
         <span class="font-extrabold text-purple-700 dark:text-purple-300">Vivek Gajdhane</span>
-        <span class="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300">💻 Technical Dept</span>
+        <span class="text-xs text-slate-500 dark:text-slate-400 font-medium">(Technical Dept)</span>
       `;
     }
     if (btnCsv) btnCsv.classList.add('hidden');
@@ -1584,9 +3357,10 @@ function setupDateFilter() {
   if (filter) {
     filter.addEventListener('change', (e) => {
       if (!STATE.isAuthenticated) return;
-      STATE.dateFilter = e.target.value;
+      setUserDateFilter(STATE.activeRole, e.target.value);
       renderCurrentTab();
-      showToast(`Filter applied: ${e.target.options[e.target.selectedIndex].text}`);
+      const userName = (MEMBER_CREDENTIALS[STATE.activeRole] && MEMBER_CREDENTIALS[STATE.activeRole].name) ? MEMBER_CREDENTIALS[STATE.activeRole].name : (STATE.activeRole || 'User');
+      showToast(`Filter applied for ${userName}: ${e.target.options[e.target.selectedIndex].text}`);
     });
   }
 }
@@ -1603,7 +3377,11 @@ function normalizeTabId(tabId) {
   if (tabId === 'assign-projects' || tabId === 'assigned-projects') return 'assign-projects';
   if (tabId === 'sales-done' || tabId === 'sales' || tabId === 'sales-ledger') return 'sales-done';
   if (tabId === 'allocated-work' || tabId === 'allocated-projects') return 'allocated-work';
-  if (tabId === 'team' || tabId === 'profit-sharing' || tabId === 'employee-dashboard')
+  if (tabId === 'completed-projects' || tabId === 'completed') return 'completed-projects';
+  if (tabId === 'my-profile' || tabId === 'profile' || tabId === 'documents') {
+    return 'my-profile';
+  }
+  if (tabId === 'team' || tabId === 'profit-sharing' || tabId === 'employee-dashboard' || tabId === 'workspace')
     return 'employee-dashboard';
   if (tabId === 'projects' || tabId === 'project-management') return 'projects';
   if (tabId === 'project-finance') {
@@ -1619,6 +3397,9 @@ function normalizeTabId(tabId) {
 function renderCurrentTab() {
   const activeTab = normalizeTabId(STATE.currentTab);
   switch (activeTab) {
+    case 'my-profile':
+      renderMyProfileTab();
+      break;
     case 'dashboard-overview':
     case 'founder-dashboard':
       renderDashboardOverview();
@@ -1634,6 +3415,9 @@ function renderCurrentTab() {
       break;
     case 'allocated-work':
       renderAllocatedWork();
+      break;
+    case 'completed-projects':
+      renderCompletedProjects();
       break;
     case 'employee-dashboard':
       renderEmployeeDashboard(STATE.selectedEmployeeId || 'mem-01');
@@ -1817,24 +3601,24 @@ function loginAsUser(role, showToastMsg = true) {
     STATE.selectedEmployeeId = 'mem-04';
   }
 
+  // 1. Apply user's personal isolated color theme (never leak to other users)
+  applyThemeForUser(role);
+
+  // 2. Apply user's personal date filter
+  STATE.dateFilter = getUserDateFilter(role);
+  const dateFilterEl = document.getElementById('date-filter');
+  if (dateFilterEl) dateFilterEl.value = STATE.dateFilter;
+
   updateRoleDisplay();
   updateLoginPills();
 
   if (role === 'arshad' || role === 'vivek' || role === 'aryan') {
     switchTab('employee-dashboard');
   } else {
-    switchTab(STATE.currentTab || 'dashboard-overview');
+    switchTab('dashboard-overview');
   }
 
   syncTasksFromSupabase();
-
-  if (showToastMsg) {
-    let msg = 'Executive Mode: Pranav Bansode (Founder & Director) • Full Authority';
-    if (role === 'arshad') msg = 'Confidential Session: Arshad Shaikh (Co-Founder) • Marketing & Planning Active';
-    else if (role === 'vivek') msg = 'Confidential Session: Vivek Gajdhane (Technical Dept) • Architecture Active';
-    else if (role === 'aryan') msg = 'Confidential Session: Aryan Bhore (Research Lead) • Market Research & Scouting Active';
-    showToast(msg);
-  }
 }
 
 // ==============================================================================
@@ -1853,7 +3637,7 @@ const MEMBER_CREDENTIALS = {
   arshad: {
     role: 'arshad',
     name: 'Arshad Shaikh',
-    designation: 'Co-Founder (Marketing & Planning)',
+    designation: 'Co-Founder & CTO',
     email: 'arshad@phoenixtech.com',
     memberCode: 'AS-02',
     validIds: ['as-02', 'as02', 'arshad', 'arshad shaikh', 'arshad.shaikh', 'arshad@phoenixtech.com'],
@@ -2018,7 +3802,6 @@ window.handleCommonLogin = async function () {
           if (errBox) errBox.classList.add('hidden');
           loginAsUser(matchedRole, false);
           recordAuditLog('USER_LOGIN', `Authenticated via Supabase Auth (${uEmail})`, uEmail);
-          showToast('Welcome! Authenticated via Supabase.');
           return;
         }
       }
@@ -2099,6 +3882,10 @@ window.logoutUser = function () {
   STATE.activeRole = null;
   STATE.currentTab = 'dashboard-overview';
 
+  // Ensure topbar profile dropdown is closed
+  const dd = document.getElementById('topbar-profile-dropdown');
+  if (dd) dd.classList.add('hidden');
+
   if (window.PhoenixSupabase && typeof window.PhoenixSupabase.logout === 'function') {
     window.PhoenixSupabase.logout().catch(() => {});
   }
@@ -2114,11 +3901,20 @@ window.logoutUser = function () {
     'modal-tech-forward',
     'modal-delivery-approval',
     'modal-new-drawing',
-    'modal-allocate-reserve'
+    'modal-allocate-reserve',
+    'modal-user-portfolio-settings',
+    'modal-offer-letter',
+    'modal-salary-slip',
+    'modal-company-policies',
+    'modal-paper-document'
   ].forEach((mId) => {
     const m = document.getElementById(mId);
     if (m) m.classList.add('hidden');
   });
+
+  // Revert to neutral light theme so the login portal is completely clean
+  document.documentElement.classList.remove('dark');
+  STATE.theme = 'light';
 
   const portal = document.getElementById('login-portal-screen');
   const app = document.getElementById('app-workspace');
@@ -2132,9 +3928,13 @@ window.logoutUser = function () {
   if (commonPass) commonPass.value = '';
   if (commonErr) commonErr.classList.add('hidden');
 
-  if (prevRole) {
-    showToast('Signed out safely. Please sign in with your Unique ID & Password.');
-  }
+  showToast('You have been signed out successfully.');
+};
+
+window.handleLogout = function () {
+  const dd = document.getElementById('topbar-profile-dropdown');
+  if (dd) dd.classList.add('hidden');
+  window.logoutUser();
 };
 
 function updateLoginPills() {
@@ -2155,19 +3955,31 @@ function updateLoginPills() {
   // Also update topbar profile indicator
   const topbarName = document.querySelector('#topbar-founder-pill span.font-extrabold');
   const topbarBadge = document.querySelector('#topbar-founder-pill span.uppercase');
-  if (topbarName && topbarBadge) {
+  if (topbarName) {
     if (current === 'pranav') {
       topbarName.textContent = 'Pranav Bansode';
-      topbarBadge.textContent = '👑 Founder / Director';
+      if (topbarBadge) {
+        topbarBadge.textContent = '👑 Founder / Director';
+        topbarBadge.classList.remove('hidden');
+      }
     } else if (current === 'arshad') {
       topbarName.textContent = 'Arshad Shaikh';
-      topbarBadge.textContent = '🤝 Co-Founder';
+      if (topbarBadge) {
+        topbarBadge.textContent = '🤝 Co-Founder';
+        topbarBadge.classList.remove('hidden');
+      }
     } else if (current === 'vivek') {
       topbarName.textContent = 'Vivek Gajdhane';
-      topbarBadge.textContent = '💻 Technical Dept';
+      if (topbarBadge) {
+        topbarBadge.textContent = '💻 Technical Dept';
+        topbarBadge.classList.remove('hidden');
+      }
     } else if (current === 'aryan') {
-      topbarName.textContent = 'Aryan Bhore';
-      topbarBadge.textContent = '🎯 Research Lead';
+      topbarName.textContent = 'Research Lead - Aryan Bhore';
+      if (topbarBadge) {
+        topbarBadge.textContent = '';
+        topbarBadge.classList.add('hidden');
+      }
     }
   }
 }
@@ -2269,6 +4081,129 @@ window.submitNewDrawing = function () {
   showToast(`Executive drawing of ${formatINR(amount)} recorded.`);
 };
 
+function renderFounderEmployeeWorkTracker() {
+  const tasks = STATE.assignedTasks || [];
+  const leads = STATE.leads || [];
+
+  const members = [
+    {
+      id: 'mem-04',
+      name: 'Aryan Bhore',
+      role: 'aryan',
+      designation: 'Research Lead',
+      avatar: 'AB',
+      currentFocus: 'Scouting new enterprise leads, client discovery, and intake requirements.',
+      activeTasks: tasks.filter((t) => t.assignedTo === 'mem-04' && t.status !== 'completed'),
+      activeLeads: leads.filter((l) => (l.submittedByMemberId === 'mem-04' || (l.submittedBy || '').toLowerCase().includes('aryan')) && l.status !== 'published_to_market' && l.status !== 'rejected')
+    },
+    {
+      id: 'mem-03',
+      name: 'Vivek Gajdhane',
+      role: 'vivek',
+      designation: 'Technical Department Lead',
+      avatar: 'VG',
+      currentFocus: 'Full-stack engineering, GodownPro warehouse inventory engine & client technical deliverables.',
+      activeTasks: tasks.filter((t) => (t.assignedTo === 'mem-03' || !t.assignedTo) && t.status !== 'completed'),
+      activeLeads: leads.filter((l) => l.status === 'allocated_to_vivek' || l.status === 'tech_in_progress')
+    },
+    {
+      id: 'mem-02',
+      name: 'Arshad Shaikh',
+      role: 'arshad',
+      designation: 'Co-Founder & CTO',
+      avatar: 'AS',
+      currentFocus: 'Technical Quality Check (Final QC) sign-offs, commercial deals, and sales execution.',
+      activeTasks: tasks.filter((t) => t.assignedTo === 'mem-02' && t.status !== 'completed'),
+      activeLeads: leads.filter((l) => l.status === 'forwarded_to_arshad' || l.status === 'forwarded_to_arshad_qc' || l.status === 'commercial_in_progress' || l.status === 'awaiting_founder_market_approval' || l.status === 'awaiting_founder_delivery')
+    }
+  ];
+
+  return `
+    <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="text-base">📡</span>
+            <h3 class="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">
+              Real-Time Employee Work &amp; Current Task Tracker
+            </h3>
+          </div>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            Live departmental tracker showing exactly what each employee is currently working on.
+          </p>
+        </div>
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950 text-[#026047] dark:text-emerald-300 text-[10px] font-black uppercase tracking-wider self-start sm:self-auto">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Live Activity Feed
+        </span>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        ${members.map((m) => {
+          const hasWork = m.activeTasks.length > 0 || m.activeLeads.length > 0;
+          return `
+            <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-3 flex flex-col justify-between">
+              <div class="space-y-2.5">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2.5">
+                    <div class="w-9 h-9 rounded-xl bg-[#026047] text-[#fffde8] font-black text-xs flex items-center justify-center shrink-0">
+                      ${escapeHtml(m.avatar)}
+                    </div>
+                    <div>
+                      <h4 class="text-xs font-black text-slate-900 dark:text-white leading-tight">${escapeHtml(m.name)}</h4>
+                      <span class="text-[10px] text-slate-500 block">${escapeHtml(m.designation)}</span>
+                    </div>
+                  </div>
+                  <span class="px-2 py-0.5 rounded text-[9px] font-bold ${hasWork ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-400'}">
+                    ${hasWork ? 'Active On Tasks' : 'Available'}
+                  </span>
+                </div>
+
+                <!-- Current Operational Task / Focus -->
+                <div class="p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-xs">
+                  <span class="text-[9px] text-slate-400 uppercase font-bold block mb-1">Current Active Focus:</span>
+                  <p class="text-[11px] text-slate-700 dark:text-slate-300 font-medium leading-relaxed">
+                    ${escapeHtml(m.currentFocus)}
+                  </p>
+                </div>
+
+                <!-- Live Assigned Tasks & Deliverables -->
+                <div class="space-y-1.5">
+                  <span class="text-[9px] text-slate-400 uppercase font-bold block">Assigned Work in Progress (${m.activeTasks.length + m.activeLeads.length}):</span>
+                  ${m.activeTasks.length === 0 && m.activeLeads.length === 0
+                    ? `<div class="text-[11px] text-slate-400 italic py-1">No active assigned tickets; executing core departmental responsibilities.</div>`
+                    : `
+                      <div class="space-y-1.5 max-h-40 overflow-y-auto">
+                        ${m.activeTasks.slice(0, 3).map((t) => `
+                          <div class="p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[11px]">
+                            <div class="font-bold text-slate-800 dark:text-slate-200 truncate">${escapeHtml(t.title)}</div>
+                            <div class="flex items-center justify-between text-[10px] text-slate-500 mt-1">
+                              <span class="font-mono text-emerald-600 dark:text-emerald-400">${escapeHtml(t.projectName || 'Initiative')}</span>
+                              <span class="px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 font-semibold uppercase text-[9px]">${escapeHtml(t.status)}</span>
+                            </div>
+                          </div>
+                        `).join('')}
+                        ${m.activeLeads.slice(0, 2).map((l) => `
+                          <div class="p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[11px]">
+                            <div class="font-bold text-slate-800 dark:text-slate-200 truncate">Lead: ${escapeHtml(l.clientName)}</div>
+                            <div class="flex items-center justify-between text-[10px] text-slate-500 mt-1">
+                              <span>${escapeHtml(l.productType || 'Custom Solution')}</span>
+                              <span class="font-black text-[#026047] dark:text-emerald-400">${formatINR(l.dealValue)}</span>
+                            </div>
+                          </div>
+                        `).join('')}
+                      </div>
+                    `
+                  }
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+}
+
 function renderEmployeeDashboard(memberId) {
   if (!requireAuth('view workspace dossier')) return;
   const container = document.getElementById('employee-dossier-container');
@@ -2338,19 +4273,6 @@ function renderEmployeeDashboard(memberId) {
     };
 
     container.innerHTML = `
-      <!-- Active Login Session Indicator Banner -->
-      <div class="p-3 px-4 rounded-xl bg-[#026047]/10 dark:bg-emerald-950/40 border border-[#026047]/20 flex flex-wrap items-center justify-between gap-2 text-xs">
-        <div class="flex items-center gap-2">
-          <span class="w-2 h-2 rounded-full bg-[#026047] animate-pulse"></span>
-          <span class="text-slate-500 dark:text-slate-400">Authenticated Session:</span>
-          <span class="font-extrabold text-[#026047] dark:text-emerald-300">Pranav Bansode</span>
-          <span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-[#026047] text-[#fffde8]">👑 Founder / Director</span>
-        </div>
-        <div class="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-          Executive Authority: Team Oversight &amp; Payout Governance
-        </div>
-      </div>
-
       <!-- Founder Executive Header Banner -->
       <div class="p-6 rounded-2xl bg-gradient-to-br from-[#026047] to-[#013829] text-[#fffde8] shadow-lg relative overflow-hidden space-y-4">
         <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -2360,19 +4282,29 @@ function renderEmployeeDashboard(memberId) {
               <span class="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-amber-400 text-slate-900 flex items-center justify-center text-xs font-black shadow ring-2 ring-[#026047]">👑</span>
             </div>
             <div>
-              <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-[#fffde8] text-[#026047] mb-1">
-                <span>👑</span> FOUNDER &amp; DIRECTOR
-              </div>
               <h2 class="text-xl font-black text-[#fffde8]">${escapeHtml(pranav.name)}</h2>
-              <p class="text-xs text-[#fffde8]/80">Sole Signatory &bull; Phoenix Tech Solutions Private Limited</p>
+              <p class="text-xs text-[#fffde8]/80 mt-0.5">Founder &amp; Sole Executive Director &bull; Phoenix Tech Solutions Private Limited</p>
             </div>
           </div>
-          <div class="p-3 rounded-xl bg-white/10 backdrop-blur border border-white/20 text-xs sm:text-right">
-            <span class="text-[10px] text-[#fffde8]/70 block uppercase font-bold">Remuneration Model</span>
-            <div class="font-extrabold text-sm text-[#fffde8] mt-0.5">Retained Equity &amp; Executive Drawings</div>
-            <div class="text-[11px] text-emerald-300 mt-1">Non-Salaried &bull; 100% Director Governance</div>
+          <div class="flex flex-col sm:items-end gap-2">
+            <div class="p-3 rounded-xl bg-white/10 backdrop-blur border border-white/20 text-xs sm:text-right">
+              <span class="text-[10px] text-[#fffde8]/70 block uppercase font-bold">Remuneration Model</span>
+              <div class="font-extrabold text-sm text-[#fffde8] mt-0.5">Retained Equity &amp; Executive Drawings</div>
+              <div class="text-[11px] text-emerald-300 mt-1">Non-Salaried &bull; 100% Director Governance</div>
+            </div>
           </div>
         </div>
+        ${(() => {
+          const fp = getUserProfile('pranav');
+          if (fp.bio || fp.notes) {
+            return `
+            <div class="p-3 rounded-xl bg-white/10 border border-white/20 text-xs space-y-1">
+              ${fp.bio ? `<div><span class="opacity-75">Executive Focus:</span> <strong class="text-white">${escapeHtml(fp.bio)}</strong></div>` : ''}
+              ${fp.notes ? `<div class="text-[11px] opacity-80 italic"><span class="font-bold not-italic opacity-100">Private Reminders:</span> ${escapeHtml(fp.notes)}</div>` : ''}
+            </div>`;
+          }
+          return '';
+        })()}
       </div>
 
       <!-- Founder Drawings & Capital Position -->
@@ -2455,6 +4387,9 @@ function renderEmployeeDashboard(memberId) {
           </table>
         </div>
       </div>
+
+      <!-- Real-Time Employee Active Work Tracker -->
+      ${renderFounderEmployeeWorkTracker()}
 
       <!-- 4. DETAILED OVERVIEW: CORE TEAM MEMBERS -->
       <div class="space-y-4 pt-4 border-t-2 border-slate-200 dark:border-slate-800">
@@ -2576,37 +4511,30 @@ function renderEmployeeDashboard(memberId) {
     const memberPayouts = (STATE.payouts || []).filter((p) => p.memberId === currentMemberId);
 
     container.innerHTML = `
-      <!-- Active Login Session Indicator Banner -->
-      <div class="p-3 px-4 rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2 text-xs">
-        <div class="flex items-center gap-2">
-          <span class="w-2 h-2 rounded-full ${isArshad ? 'bg-blue-500' : (isAryan ? 'bg-emerald-500' : 'bg-purple-500')}"></span>
-          <span class="text-slate-500 dark:text-slate-400">Authenticated Session:</span>
-          <span class="font-extrabold text-slate-900 dark:text-white">${escapeHtml(mem.name)}</span>
-          <span class="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${badgeColorClass}">
-            ${roleEmoji} ${escapeHtml(mem.designation)}
-          </span>
-        </div>
-        <div class="text-[11px] text-slate-500 dark:text-slate-400">
-          Private Individual Portfolio &bull; Company Executive Drawings Confidential
-        </div>
-      </div>
-
       <!-- Employee Profile Banner -->
-      <div class="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div class="flex items-center gap-4">
-            <div class="w-16 h-16 rounded-2xl bg-[#026047] text-[#fffde8] flex items-center justify-center font-black text-2xl shadow-sm">
-              ${initials}
-            </div>
-            <div>
-              <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${badgeColorClass} mb-1">
-                <span>${roleEmoji}</span> ${escapeHtml(mem.designation.toUpperCase())}
+        <div class="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+          <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div class="flex items-center gap-4">
+              <div class="w-16 h-16 rounded-2xl bg-[#026047] text-[#fffde8] flex items-center justify-center font-black text-2xl shadow-sm">
+                ${initials}
               </div>
-              <h2 class="text-xl font-black text-slate-900 dark:text-white">${escapeHtml(mem.name)}</h2>
-              <p class="text-xs text-slate-500 dark:text-slate-400">Phoenix Tech Solutions Private Limited</p>
+              <div>
+                <h2 class="text-xl font-black text-slate-900 dark:text-white">${escapeHtml(mem.name)}</h2>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">${escapeHtml(mem.designation)} &bull; Phoenix Tech Solutions Private Limited</p>
+              </div>
             </div>
           </div>
-        </div>
+        ${(() => {
+          const up = getUserProfile(activeUser);
+          if (up.bio || up.notes) {
+            return `
+            <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 text-xs space-y-1">
+              ${up.bio ? `<div class="font-bold text-slate-800 dark:text-slate-200"><span class="text-slate-400 font-normal">Personal Focus:</span> ${escapeHtml(up.bio)}</div>` : ''}
+              ${up.notes ? `<div class="text-[11px] text-slate-600 dark:text-slate-400 italic"><span class="font-bold not-italic text-slate-500">Private Notes:</span> ${escapeHtml(up.notes)}</div>` : ''}
+            </div>`;
+          }
+          return '';
+        })()}
       </div>
 
       ${
@@ -2810,7 +4738,7 @@ function renderEmployeeDashboard(memberId) {
 
               <div class="p-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-xs space-y-1.5">
                 <div class="flex items-center justify-between text-[11px] text-slate-500 border-b border-slate-100 dark:border-slate-800 pb-1">
-                  <span><strong>Work Allocation:</strong> ${lead.allocatedToName ? `<span class="font-bold text-blue-600 dark:text-blue-400">💻 ${escapeHtml(lead.allocatedToName)}</span>` : '<span class="text-slate-400">Awaiting Founder Technical Allocation</span>'}</span>
+                  <span><strong>Work Allocation:</strong> ${lead.allocatedToName ? `<span class="font-bold text-blue-600 dark:text-blue-400">💻 ${escapeHtml(formatDepartmentAllocation(lead.allocatedToName))}</span>` : '<span class="text-slate-400">Awaiting Founder Technical Allocation</span>'}</span>
                   <span>${lead.dueDate ? `Target Due: <strong class="text-slate-700 dark:text-slate-300">${formatDate(lead.dueDate)}</strong>` : `Created: ${formatDate(lead.submittedAt)}`}</span>
                 </div>
                 <div class="text-slate-600 dark:text-slate-300 text-[11px] leading-relaxed">
@@ -3002,6 +4930,11 @@ function renderApprovals() {
 
   // 4. Pending Deliverable Tasks
   (STATE.assignedTasks || []).forEach((task) => {
+    // If task is linked to a lead that is in technical progress or forwarded to Commercial (Arshad), do NOT list in Founder approvals
+    const linkedLead = task.leadId ? (STATE.leads || []).find((l) => l.id === task.leadId) : null;
+    if (linkedLead && (linkedLead.status === 'forwarded_to_arshad' || linkedLead.status === 'commercial_in_progress' || linkedLead.status === 'allocated_to_vivek' || linkedLead.status === 'tech_in_progress')) {
+      return;
+    }
     if (task.status === 'review_pending') {
       pendingItems.push({
         type: 'TASK',
@@ -3020,9 +4953,9 @@ function renderApprovals() {
     }
   });
 
-  // 5. Client Deals Awaiting Market Approval & Publication Clearance
+  // 5. Client Deals Awaiting Market Approval & Publication Clearance (Only after Commercial packaging is submitted)
   (STATE.leads || []).forEach((lead) => {
-    if (lead.status === 'awaiting_founder_market_approval' || lead.status === 'sent_to_arshad_notified_founder') {
+    if (lead.status === 'awaiting_founder_market_approval') {
       pendingItems.push({
         type: 'MARKET_PUBLISH',
         rawType: 'lead_market',
@@ -3037,7 +4970,7 @@ function renderApprovals() {
         statusLabel: 'Awaiting Market Sign-off',
         badgeClass: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300',
       });
-    } else if (lead.status === 'submitted_to_founder') {
+    } else if (lead.status === 'submitted_to_founder' || lead.status === 'submitted_to_arshad') {
       pendingItems.push({
         type: 'LEAD',
         rawType: 'lead',
@@ -3049,7 +4982,7 @@ function renderApprovals() {
         amount: Number(lead.dealValue) || 0,
         scopeDisplay: formatINR(lead.dealValue),
         date: lead.submittedAt ? lead.submittedAt.split('T')[0] : (lead.date || ''),
-        statusLabel: 'Awaiting Allocation',
+        statusLabel: 'Awaiting Arshad CTO Clearance',
         badgeClass: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300',
       });
     }
@@ -3106,18 +5039,16 @@ function renderApprovals() {
     `;
   }
 
-  // Filter items based on active category
-  const filter = STATE.approvalFilter || 'ALL';
-  const visibleItems =
-    filter === 'ALL' ? pendingItems : pendingItems.filter((i) => i.type === filter);
+  // Unified pending approvals master clearance queue (category filters removed per founder requirement)
+  const visibleItems = pendingItems;
 
   if (visibleItems.length === 0) {
     tableBody.innerHTML = `
       <tr>
         <td colspan="8" class="py-12 text-center text-slate-400 dark:text-slate-500">
           <div class="text-3xl mb-2">🎉</div>
-          <div class="text-sm font-bold text-slate-700 dark:text-slate-300">No Pending Approvals in This Category</div>
-          <p class="text-xs text-slate-400 mt-1">All company inflows, reimbursements and deliverable milestones are up to date and verified by Founder.</p>
+          <div class="text-sm font-bold text-slate-700 dark:text-slate-300">No Pending Approvals</div>
+          <p class="text-xs text-slate-400 mt-1">All company inflows, reimbursements, client leads and deliverable milestones are up to date and verified by Founder.</p>
         </td>
       </tr>
     `;
@@ -3729,11 +5660,23 @@ function submitAssignTask() {
 }
 window.submitAssignTask = submitAssignTask;
 
+function formatDepartmentAllocation(allocatedToName) {
+  if (!allocatedToName) return 'Technical Dept';
+  const str = String(allocatedToName).trim();
+  const lower = str.toLowerCase();
+  if (lower.includes('awaiting')) return str;
+  if (lower.includes('vivek') || lower.includes('tech')) return 'Technical Dept';
+  if (lower.includes('arshad') || lower.includes('commercial') || lower.includes('business')) return 'Commercial / Business Planning Dept';
+  if (lower.includes('aryan') || lower.includes('research')) return 'Research Dept';
+  return str;
+}
+window.formatDepartmentAllocation = formatDepartmentAllocation;
+
 function isUuidString(str) {
   return typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 }
 
-function deleteAssignedTask(id) {
+async function deleteAssignedTask(id) {
   if (!requireAuth('delete delegated tasks')) return;
   const task = (STATE.assignedTasks || []).find((t) => t.id === id);
   if (!confirm(`Are you sure you want to permanently delete task "${task ? task.title : id}"?\nIt will be permanently removed from the portal and database.`)) return;
@@ -3741,14 +5684,21 @@ function deleteAssignedTask(id) {
   STATE.assignedTasks = (STATE.assignedTasks || []).filter((t) => t.id !== id);
   saveAssignedTasksToStorage();
 
-  const sb = getSupabaseClient();
-  if (sb) {
-    if (id && isUuidString(id)) {
-      sb.from('assigned_tasks').delete().eq('id', id).catch(() => {});
-    }
-    if (task && task.title) {
-      sb.from('assigned_tasks').delete().eq('title', task.title).catch(() => {});
-    }
+  // Record tombstone to prevent resurrection
+  try {
+    const tombstones = JSON.parse(localStorage.getItem('phoenix_deleted_tasks') || '[]');
+    tombstones.push(id);
+    if (task && task.title) tombstones.push(task.title);
+    localStorage.setItem('phoenix_deleted_tasks', JSON.stringify([...new Set(tombstones)]));
+  } catch (_) {}
+
+  // Delete from Supabase tables
+  if (id && isUuidString(id)) {
+    await deleteFromSupabase('assigned_tasks', 'id', id);
+  }
+  if (task && task.title) {
+    await deleteFromSupabase('assigned_tasks', 'title', task.title);
+    await deleteFromSupabaseLike('assigned_tasks', 'title', '%' + task.title + '%');
   }
 
   saveAppStateToStorage();
@@ -3766,7 +5716,7 @@ function deleteAssignedTask(id) {
 }
 window.deleteAssignedTask = deleteAssignedTask;
 
-window.deleteLead = function (leadId) {
+window.deleteLead = async function (leadId) {
   if (!requireAuth('delete leads')) return;
   const lead = (STATE.leads || []).find((l) => l.id === leadId);
   if (!lead) return;
@@ -3775,38 +5725,51 @@ window.deleteLead = function (leadId) {
     return;
   }
 
-  // 1. Remove from STATE.leads
+  // 1. Remove from STATE.leads & store tombstones
   STATE.leads = (STATE.leads || []).filter((l) => l.id !== leadId);
   saveLeadsToStorage();
 
-  // 2. Remove any linked assigned task
-  const linkedTasks = (STATE.assignedTasks || []).filter((t) => t.leadId === leadId);
+  try {
+    const leadTombstones = JSON.parse(localStorage.getItem('phoenix_deleted_leads') || '[]');
+    leadTombstones.push(leadId);
+    if (lead.leadNumber) leadTombstones.push(lead.leadNumber);
+    if (lead.clientName) leadTombstones.push(lead.clientName);
+    localStorage.setItem('phoenix_deleted_leads', JSON.stringify([...new Set(leadTombstones)]));
+  } catch (_) {}
+
+  // 2. Remove any linked assigned task & tombstone them
+  const linkedTasks = (STATE.assignedTasks || []).filter((t) => t.leadId === leadId || (lead.leadNumber && (t.description || '').includes(lead.leadNumber)));
   if (linkedTasks.length > 0) {
-    STATE.assignedTasks = (STATE.assignedTasks || []).filter((t) => t.leadId !== leadId);
+    STATE.assignedTasks = (STATE.assignedTasks || []).filter((t) => t.leadId !== leadId && (!lead.leadNumber || !(t.description || '').includes(lead.leadNumber)));
     saveAssignedTasksToStorage();
-    const sb = getSupabaseClient();
-    if (sb) {
+
+    try {
+      const taskTombstones = JSON.parse(localStorage.getItem('phoenix_deleted_tasks') || '[]');
       linkedTasks.forEach((t) => {
-        if (t.id && isUuidString(t.id)) sb.from('assigned_tasks').delete().eq('id', t.id).catch(() => {});
-        if (t.title) sb.from('assigned_tasks').delete().eq('title', t.title).catch(() => {});
+        taskTombstones.push(t.id);
+        if (t.title) taskTombstones.push(t.title);
       });
+      localStorage.setItem('phoenix_deleted_tasks', JSON.stringify([...new Set(taskTombstones)]));
+    } catch (_) {}
+
+    for (const t of linkedTasks) {
+      if (t.id && isUuidString(t.id)) await deleteFromSupabase('assigned_tasks', 'id', t.id);
+      if (t.title) await deleteFromSupabase('assigned_tasks', 'title', t.title);
     }
   }
 
-  // 3. Delete from Supabase client_leads table
-  const sb = getSupabaseClient();
-  if (sb) {
-    if (leadId) {
-      sb.from('client_leads').delete().eq('id', leadId).then(({ error }) => {
-        if (error) console.warn('Supabase lead delete note:', error.message);
-      }).catch(() => {});
-    }
-    if (lead.leadNumber) {
-      sb.from('client_leads').delete().eq('lead_number', lead.leadNumber).catch(() => {});
-    }
-    if (lead.clientName) {
-      sb.from('client_leads').delete().eq('client_name', lead.clientName).catch(() => {});
-    }
+  // 3. Delete across all related Supabase tables
+  await deleteFromSupabase('client_leads', 'id', leadId);
+  if (lead.leadNumber) {
+    await deleteFromSupabase('client_leads', 'lead_number', lead.leadNumber);
+    await deleteFromSupabaseLike('assigned_tasks', 'description', '%' + lead.leadNumber + '%');
+    await deleteFromSupabaseLike('audit_logs', 'details', '%' + lead.leadNumber + '%');
+  }
+  if (lead.clientName) {
+    await deleteFromSupabase('client_leads', 'client_name', lead.clientName);
+    await deleteFromSupabase('income_records', 'client_name', lead.clientName);
+    await deleteFromSupabaseLike('assigned_tasks', 'title', '%' + lead.clientName + '%');
+    await deleteFromSupabaseLike('audit_logs', 'details', '%' + lead.clientName + '%');
   }
 
   // 4. Remove linked notifications
@@ -3833,7 +5796,7 @@ window.deleteLead = function (leadId) {
   renderSidebarNav(STATE.currentTab);
 };
 
-window.deleteIncome = function (id) {
+window.deleteIncome = async function (id) {
   if (!requireAuth('delete income records')) return;
   const inc = (STATE.income || []).find((i) => i.id === id);
   if (!inc) return;
@@ -3845,17 +5808,22 @@ window.deleteIncome = function (id) {
   STATE.income = (STATE.income || []).filter((i) => i.id !== id);
   saveAppStateToStorage();
 
-  const sb = getSupabaseClient();
-  if (sb) {
-    if (id && isUuidString(id)) {
-      sb.from('income_records').delete().eq('id', id).catch(() => {});
-    }
-    if (inc.clientName) {
-      sb.from('income_records').delete().eq('client_name', inc.clientName).catch(() => {});
-    }
-    if (inc.invoiceNumber) {
-      sb.from('income_records').delete().eq('invoice_no', inc.invoiceNumber).catch(() => {});
-    }
+  try {
+    const incTombstones = JSON.parse(localStorage.getItem('phoenix_deleted_income') || '[]');
+    incTombstones.push(id);
+    if (inc.invoiceNumber) incTombstones.push(inc.invoiceNumber);
+    if (inc.clientName) incTombstones.push(inc.clientName);
+    localStorage.setItem('phoenix_deleted_income', JSON.stringify([...new Set(incTombstones)]));
+  } catch (_) {}
+
+  if (id && isUuidString(id)) {
+    await deleteFromSupabase('income_records', 'id', id);
+  }
+  if (inc.clientName) {
+    await deleteFromSupabase('income_records', 'client_name', inc.clientName);
+  }
+  if (inc.invoiceNumber) {
+    await deleteFromSupabase('income_records', 'invoice_no', inc.invoiceNumber);
   }
 
   const actor = MEMBER_NAME_MAP[getCurrentMemberId()] || (STATE.activeRole === 'pranav' ? 'Pranav Bansode (Founder)' : 'Authenticated User');
@@ -3873,7 +5841,7 @@ window.deleteIncome = function (id) {
   renderSidebarNav(STATE.currentTab);
 };
 
-window.deleteExpense = function (id) {
+window.deleteExpense = async function (id) {
   if (!requireAuth('delete expense records')) return;
   const exp = (STATE.expenses || []).find((e) => e.id === id);
   if (!exp) return;
@@ -3885,14 +5853,18 @@ window.deleteExpense = function (id) {
   STATE.expenses = (STATE.expenses || []).filter((e) => e.id !== id);
   saveAppStateToStorage();
 
-  const sb = getSupabaseClient();
-  if (sb) {
-    if (id && isUuidString(id)) {
-      sb.from('expense_records').delete().eq('id', id).catch(() => {});
-    }
-    if (exp.title) {
-      sb.from('expense_records').delete().eq('title', exp.title).catch(() => {});
-    }
+  try {
+    const expTombstones = JSON.parse(localStorage.getItem('phoenix_deleted_expenses') || '[]');
+    expTombstones.push(id);
+    if (exp.title) expTombstones.push(exp.title);
+    localStorage.setItem('phoenix_deleted_expenses', JSON.stringify([...new Set(expTombstones)]));
+  } catch (_) {}
+
+  if (id && isUuidString(id)) {
+    await deleteFromSupabase('expense_records', 'id', id);
+  }
+  if (exp.title) {
+    await deleteFromSupabase('expense_records', 'title', exp.title);
   }
 
   const actor = MEMBER_NAME_MAP[getCurrentMemberId()] || (STATE.activeRole === 'pranav' ? 'Pranav Bansode (Founder)' : 'Authenticated User');
@@ -4115,7 +6087,7 @@ function renderAllocatedWork() {
 
           <div class="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 text-xs text-slate-700 dark:text-slate-300 space-y-1.5">
             <div class="flex items-center justify-between text-[11px] text-slate-500 border-b border-slate-200/60 dark:border-slate-700/60 pb-1">
-              <span><strong>Work Allocation:</strong> ${lead.allocatedToName ? `<span class="font-bold text-blue-600 dark:text-blue-400">💻 ${escapeHtml(lead.allocatedToName)} (Technical Dept)</span>` : '<span class="text-slate-400">Awaiting Founder Approval</span>'}</span>
+              <span><strong>Work Allocation:</strong> ${lead.allocatedToName ? `<span class="font-bold text-blue-600 dark:text-blue-400">💻 ${escapeHtml(formatDepartmentAllocation(lead.allocatedToName))}</span>` : '<span class="text-slate-400">Awaiting Founder Approval</span>'}</span>
               <span>Target Due: <strong class="text-slate-900 dark:text-white font-bold">${lead.dueDate ? formatDate(lead.dueDate) : 'Pending'}</strong></span>
             </div>
             <div class="text-[11px] leading-relaxed">
@@ -4136,7 +6108,7 @@ function renderAllocatedWork() {
                       <span>🔗</span> View Technical Deliverable
                     </a>`
                   : lead.allocatedTo && lead.status !== 'submitted_to_founder'
-                  ? `<span class="px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-medium text-xs">💻 Allocated to ${escapeHtml(lead.allocatedToName || 'Technical Department')}</span>`
+                  ? `<span class="px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-medium text-xs">💻 Allocated to ${escapeHtml(formatDepartmentAllocation(lead.allocatedToName))}</span>`
                   : `<span class="px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 font-medium text-xs">⏳ Awaiting Founder Clearance</span>`
               }
             </div>
@@ -4307,12 +6279,21 @@ function renderAllocatedWork() {
             </button>
           `;
         } else if (task.status === 'in_progress') {
-          actionControl = `
-            <button onclick="updateTaskStatus('${tId}', 'review_pending')"
-              class="px-3.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition flex items-center gap-1.5 shadow-sm">
-              <span>📤</span> Submit for Founder Approval
-            </button>
-          `;
+          if (task.assignedTo === 'mem-03' || STATE.activeRole === 'vivek') {
+            actionControl = `
+              <button onclick="forwardVivekTaskToArshad('${tId}')"
+                class="px-3.5 py-1.5 rounded-lg bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs transition flex items-center gap-1.5 shadow-sm">
+                <span>📤</span> Complete &amp; Forward to Arshad
+              </button>
+            `;
+          } else {
+            actionControl = `
+              <button onclick="updateTaskStatus('${tId}', 'review_pending')"
+                class="px-3.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition flex items-center gap-1.5 shadow-sm">
+                <span>📤</span> Submit for Founder Approval
+              </button>
+            `;
+          }
         } else if (task.status === 'review_pending') {
           actionControl = `
             <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-50 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 font-bold text-xs">
@@ -4466,25 +6447,25 @@ function renderSingleLeadCard(rawLead, currentRole) {
   const s4Done = lead.status === 'published_to_market' || lead.status === 'approved_for_delivery';
   const s4Active = lead.status === 'awaiting_founder_market_approval';
 
-  let currentStageText = 'Stage 1: Awaiting Founder Clearance';
+  let currentStageText = 'Stage 1: Awaiting Arshad CTO Clearance';
   let badgeColor = 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-300';
   if (lead.status === 'rejected') {
-    currentStageText = 'Declined by Founder';
+    currentStageText = 'Declined by Leadership';
     badgeColor = 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border-rose-300';
   } else if (lead.status === 'allocated_to_vivek') {
-    currentStageText = 'Stage 2: Approved by Founder • Vivek Assigned';
-    badgeColor = 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border-purple-300';
-  } else if (lead.status === 'tech_in_progress') {
-    currentStageText = 'Stage 2: Vivek Tech In Progress';
-    badgeColor = 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border-purple-300 animate-pulse';
-  } else if (lead.status === 'forwarded_to_arshad' || lead.status === 'sent_to_arshad_notified_founder') {
-    currentStageText = 'Stage 3: Forwarded to Arshad (Commercial)';
+    currentStageText = 'Stage 2: Approved by CTO • Technical Dept Assigned';
     badgeColor = 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border-blue-300';
-  } else if (lead.status === 'commercial_in_progress') {
-    currentStageText = 'Stage 3: Arshad Packaging In Progress';
+  } else if (lead.status === 'tech_in_progress') {
+    currentStageText = 'Stage 2: Technical Dept In Progress';
     badgeColor = 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border-blue-300 animate-pulse';
+  } else if (lead.status === 'forwarded_to_arshad' || lead.status === 'sent_to_arshad_notified_founder') {
+    currentStageText = 'Stage 3: Forwarded to Commercial & Marketing Dept';
+    badgeColor = 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-300';
+  } else if (lead.status === 'commercial_in_progress') {
+    currentStageText = 'Stage 3: Commercial & Marketing Dept Packaging In Progress';
+    badgeColor = 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-300 animate-pulse';
   } else if (lead.status === 'awaiting_founder_market_approval') {
-    currentStageText = 'Stage 4: Awaiting Founder Market Clearance';
+    currentStageText = 'Stage 4: Commercial Ready • Awaiting Market Publication';
     badgeColor = 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-300 animate-pulse';
   } else if (lead.status === 'published_to_market' || lead.status === 'approved_for_delivery') {
     currentStageText = 'Stage 4: Approved & Published in Market';
@@ -4494,21 +6475,21 @@ function renderSingleLeadCard(rawLead, currentRole) {
   const safeDeliverable = lead.deliverableUrl ? sanitizeUrl(lead.deliverableUrl) : '';
 
   let actionButtons = '';
-  // Point 2 & 4: Before founder approval, Vivek CANNOT start work ("Start Work" button is disabled)
-  if (lead.status === 'submitted_to_founder') {
+  // Routing: Arshad approves lead and allocates to Vivek
+  if (lead.status === 'submitted_to_founder' || lead.status === 'submitted_to_arshad') {
     if (isVivek) {
       actionButtons = `
         <button disabled
           class="px-3.5 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed text-xs font-bold flex items-center gap-1.5 opacity-60 border border-slate-300 dark:border-slate-700 shadow-none"
-          title="Awaiting Founder Pranav's Approval before technical development can start">
-          <span>🔒</span> Start Work (Awaiting Founder Approval)
+          title="Awaiting Arshad CTO's Approval before technical development can start">
+          <span>🔒</span> Start Work (Awaiting Arshad CTO Approval)
         </button>
       `;
-    } else if (isPranav) {
+    } else if (isArshad || isPranav) {
       actionButtons = `
-        <button onclick="approveLeadByFounder('${lid}')"
+        <button onclick="approveLeadByArshad('${lid}')"
           class="px-3.5 py-1.5 rounded-xl bg-[#026047] hover:bg-[#024d39] text-[#fffde8] font-bold text-xs transition shadow-sm flex items-center gap-1.5 cursor-pointer">
-          <span>👑</span> Approve Lead
+          <span>🤝</span> Approve Lead &amp; Allocate to Vivek
         </button>
         <button onclick="rejectApprovalItem('lead', '${lid}')"
           class="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 font-bold text-xs transition inline-flex items-center gap-1 cursor-pointer">
@@ -4516,14 +6497,14 @@ function renderSingleLeadCard(rawLead, currentRole) {
         </button>
       `;
     }
-  } else if (lead.status === 'allocated_to_vivek' && (isVivek || isPranav)) {
+  } else if (lead.status === 'allocated_to_vivek' && (isVivek || isPranav || isArshad)) {
     actionButtons = `
       <button onclick="startVivekTechWork('${lid}')"
         class="px-3.5 py-1.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs transition shadow-sm flex items-center gap-1.5 cursor-pointer">
         <span>🚀</span> Start Tech Work
       </button>
     `;
-  } else if (lead.status === 'tech_in_progress' && (isVivek || isPranav)) {
+  } else if (lead.status === 'tech_in_progress' && (isVivek || isPranav || isArshad)) {
     actionButtons = `
       <button onclick="openTechForwardModal('${lid}')"
         class="px-3.5 py-1.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs transition shadow-sm flex items-center gap-1.5 cursor-pointer">
@@ -4541,14 +6522,14 @@ function renderSingleLeadCard(rawLead, currentRole) {
     actionButtons = `
       <button onclick="openArshadSubmitModal('${lid}')"
         class="px-3.5 py-1.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs transition shadow-sm flex items-center gap-1.5 cursor-pointer">
-        <span>👑</span> Complete &amp; Submit for Founder Market Clearance
+        <span>👑</span> Complete &amp; Submit for Market Clearance
       </button>
     `;
-  } else if ((lead.status === 'awaiting_founder_market_approval' || lead.status === 'sent_to_arshad_notified_founder') && isPranav) {
+  } else if ((lead.status === 'awaiting_founder_market_approval' || lead.status === 'sent_to_arshad_notified_founder') && (isPranav || isArshad)) {
     actionButtons = `
       <button onclick="openDeliveryApprovalModal('${lid}')"
         class="px-3.5 py-1.5 rounded-xl bg-[#026047] hover:bg-[#024d39] text-[#fffde8] font-black text-xs transition shadow-sm flex items-center gap-1.5 cursor-pointer">
-        <span>👑</span> Verify &amp; Publish in Market
+        <span>🏆</span> Verify &amp; Publish in Market for Sale
       </button>
     `;
   } else if (lead.status === 'published_to_market' || lead.status === 'approved_for_delivery') {
@@ -4824,8 +6805,7 @@ window.submitClientLead = function () {
   const newLeadId = 'lead-' + Date.now();
   const leadNum = 'LEAD-2026-' + String((STATE.leads || []).length + 1).padStart(3, '0');
 
-  // Point 1, 4 & 6: Lead goes directly to Founder for approval first!
-  // Task is NOT created in Assigned Tasks until Founder approves in the Approval section!
+  // Point 1: When research team creates lead, it goes directly to Arshad (Co-Founder & CTO); Founder receives tracking notification only
   const newLead = normalizeLead({
     id: newLeadId,
     leadNumber: leadNum,
@@ -4838,8 +6818,8 @@ window.submitClientLead = function () {
     submittedBy: submitter,
     submittedByMemberId: getCurrentMemberId(),
     submittedAt: new Date().toISOString(),
-    status: 'submitted_to_founder',
-    stage: 'submitted_to_founder',
+    status: 'submitted_to_arshad',
+    stage: 'submitted_to_arshad',
     allocatedTo: 'mem-03',
     allocatedToName: 'Technical Department',
     dueDate: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
@@ -4848,19 +6828,30 @@ window.submitClientLead = function () {
   STATE.leads.unshift(newLead);
   saveLeadsToStorage();
   recordAuditLog(
-    'LEAD_SUBMITTED_TO_FOUNDER',
-    `Research Department scouted lead "${clientName}" (${formatINR(dealValue)}) — sent to Founder for clearance.`,
+    'LEAD_SUBMITTED_TO_ARSHAD',
+    `Research Department scouted lead "${clientName}" (${formatINR(dealValue)}) — sent directly to Arshad Shaikh (Co-Founder & CTO) for clearance.`,
     'Research Department'
   );
   saveAppStateToStorage();
   syncLeadToSupabase(newLead);
 
-  // Point 1: Whenever submitting on portal, notify founder and co-founder + team
+  // 1. Actionable notification to Arshad (Co-Founder & CTO) for review and approval
   createNotification({
-    type: 'LEAD_CREATED',
-    title: `🎯 New Lead Scouted: ${clientName}`,
-    message: `Research Department scouted "${clientName}" (${formatINR(dealValue)}). Submitted to Founder for clearance.`,
-    targetRole: 'all',
+    type: 'LEAD_PENDING_APPROVAL',
+    title: `🎯 New Lead Awaiting Approval: ${clientName}`,
+    message: `Research Department scouted "${clientName}" (${formatINR(dealValue)}). Routed directly to you for approval & technical allocation.`,
+    targetRole: 'arshad',
+    leadId: newLead.id,
+    actor: 'Research Department',
+    actorRole: 'aryan'
+  });
+
+  // 2. Informative notification to Founder Pranav for tracking only
+  createNotification({
+    type: 'LEAD_CREATED_TRACKING',
+    title: `ℹ️ New Research Lead: ${clientName}`,
+    message: `Aryan scouted "${clientName}" (${formatINR(dealValue)}). Routed directly to Arshad (Co-Founder & CTO) for approval.`,
+    targetRole: 'pranav',
     leadId: newLead.id,
     actor: 'Research Department',
     actorRole: 'aryan'
@@ -4870,26 +6861,25 @@ window.submitClientLead = function () {
   const form = document.querySelector('#modal-new-lead form');
   if (form) form.reset();
 
-  showToast(`🎯 Lead "${clientName}" sent to Founder Pranav for approval.`);
+  showToast(`🎯 Lead "${clientName}" sent directly to Arshad (Co-Founder & CTO) for approval.`);
   renderCurrentTab();
   if (STATE.currentTab === 'approvals') renderApprovals();
   renderSidebarNav(STATE.currentTab);
 };
 
-window.approveLeadByFounder = function (leadId) {
+window.approveLeadByArshad = function (leadId) {
   if (!requireFounder('approve client leads')) return;
   const lead = (STATE.leads || []).find((l) => l.id === leadId);
   if (!lead) return;
 
   lead.status = 'allocated_to_vivek';
   lead.stage = 'allocated_to_vivek';
-  lead.approvedByFounder = true;
-  lead.founderApprovedAt = new Date().toISOString();
+  lead.approvedByArshad = true;
+  lead.arshadApprovedAt = new Date().toISOString();
   lead.allocatedAt = new Date().toISOString();
   lead.allocatedTo = 'mem-03';
   lead.allocatedToName = 'Technical Department';
 
-  // Point 6: After approving by founder then and then only the assigned task section will update with that task!
   const existingTask = (STATE.assignedTasks || []).find((t) => t.leadId === lead.id);
   if (!existingTask) {
     const newTask = {
@@ -4903,7 +6893,7 @@ window.approveLeadByFounder = function (leadId) {
       priority: lead.priority || 'high',
       dueDate: lead.dueDate || new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
       assignedDate: new Date().toISOString().split('T')[0],
-      assignedBy: 'Executive & Founder Oversight',
+      assignedBy: 'Arshad Shaikh (Co-Founder & CTO)',
       description: `[Scope from Research Department]: ${lead.requirements}`,
       status: 'assigned',
       leadId: lead.id,
@@ -4915,38 +6905,51 @@ window.approveLeadByFounder = function (leadId) {
 
   saveLeadsToStorage();
   recordAuditLog(
-    'LEAD_APPROVED_BY_FOUNDER',
-    `Founder approved lead "${lead.clientName}" (${formatINR(lead.dealValue)}) and allocated technical development to Technical Department.`,
-    'Pranav Bansode (Founder / Director)'
+    'LEAD_APPROVED_BY_ARSHAD',
+    `Arshad Shaikh (Co-Founder & CTO) approved lead "${lead.clientName}" (${formatINR(lead.dealValue)}) and allocated technical development to Vivek.`,
+    'Arshad Shaikh (Co-Founder & CTO)'
   );
   saveAppStateToStorage();
   syncLeadToSupabase(lead);
 
-  // Point 1: Notify founder, co-founder and rest of portal users
+  // Notify Vivek that technical work is assigned
   createNotification({
-    type: 'LEAD_APPROVED',
-    title: `✅ Lead Allocated: ${lead.clientName}`,
-    message: `Founder approved lead. Assigned to Technical Department for development.`,
-    targetRole: 'all',
+    type: 'TASK_ALLOCATED',
+    title: `🚀 Technical Allocation: ${lead.clientName}`,
+    message: `Arshad approved lead "${lead.clientName}". Assigned to Technical Department for development.`,
+    targetRole: 'vivek',
     leadId: lead.id,
-    actor: 'Founder & Director',
-    actorRole: 'pranav'
+    actor: 'Arshad Shaikh (Co-Founder & CTO)',
+    actorRole: 'arshad'
   });
 
-  showToast(`✅ Lead "${lead.clientName}" approved! Work assigned to Technical Department.`);
+  // Notify Founder Pranav for tracking
+  createNotification({
+    type: 'LEAD_APPROVED_TRACKING',
+    title: `ℹ️ Lead Approved & Allocated: ${lead.clientName}`,
+    message: `Arshad approved lead "${lead.clientName}" (${formatINR(lead.dealValue)}) and allocated technical development to Vivek.`,
+    targetRole: 'pranav',
+    leadId: lead.id,
+    actor: 'Arshad Shaikh (Co-Founder & CTO)',
+    actorRole: 'arshad'
+  });
+
+  showToast(`🤝 Lead "${lead.clientName}" approved by Arshad! Work assigned to Vivek.`);
   renderCurrentTab();
   if (STATE.currentTab === 'approvals') renderApprovals();
   renderSidebarNav(STATE.currentTab);
 };
+
+window.approveLeadByFounder = window.approveLeadByArshad;
 
 window.startVivekTechWork = function (leadId) {
   if (!requireAuth('start technical development')) return;
   const lead = (STATE.leads || []).find((l) => l.id === leadId);
   if (!lead) return;
 
-  // Point 4: Vivek cannot start work before founder approval!
-  if (lead.status === 'submitted_to_founder') {
-    alert('Security Gate: Founder Pranav Bansode must verify and approve this lead before technical development can start.');
+  // Vivek cannot start work before Arshad CTO approval
+  if (lead.status === 'submitted_to_founder' || lead.status === 'submitted_to_arshad') {
+    alert('Security Gate: Arshad Shaikh (Co-Founder & CTO) must verify and approve this lead before technical development can start.');
     return;
   }
   if (lead.status === 'rejected') {
@@ -5146,28 +7149,56 @@ window.confirmTechForward = function () {
   lead.techCompletedAt = new Date().toISOString();
   lead.founderNotified = true;
 
-  const linkedTask = (STATE.assignedTasks || []).find((t) => t.leadId === lead.id);
+  // Technical Department deliverable is completed; does NOT go to Founder's approval queue
+  const linkedTask = (STATE.assignedTasks || []).find((t) => t.leadId === lead.id && (t.assignedTo === 'mem-03' || !t.assignedTo || t.assignedTo === 'mem-01'));
   if (linkedTask) {
-    linkedTask.status = 'review_pending';
+    linkedTask.status = 'completed';
+    linkedTask.completedDate = new Date().toISOString().split('T')[0];
+    linkedTask.approvedBy = 'Technical Engineering Handover';
+    linkedTask.notes = `Technical deliverables completed by Vivek Gajdhane and forwarded directly to Arshad Shaikh for Final QC (Quality Check). Deliverable: ${safeUrl}`;
     saveAssignedTasksToStorage();
     syncAssignedTaskToSupabase(linkedTask);
   }
 
+  // Create Final QC deliverable directly assigned to Arshad (Co-Founder & CTO)
+  const existingArshadTask = (STATE.assignedTasks || []).find((t) => t.leadId === lead.id && t.assignedTo === 'mem-02');
+  if (!existingArshadTask) {
+    const arshadTask = {
+      id: 'task-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+      title: `Final QC (Quality Check): ${lead.clientName}`,
+      description: `Technical work completed by Vivek Gajdhane. Deliverable URL: ${safeUrl}. Arshad Shaikh (Co-Founder & CTO) to perform Final QC verification and forward to Founder Pranav for Final Delivery.`,
+      assignedTo: 'mem-02',
+      assignedToName: 'Arshad Shaikh',
+      assignedBy: 'Technical Department (Vivek Gajdhane)',
+      department: 'Executive Technical & Commercial Architecture',
+      projectId: lead.projectId || 'prj-godownpro',
+      projectName: lead.productType || 'Technology Solution',
+      priority: 'HIGH',
+      status: 'assigned',
+      leadId: lead.id,
+      assignedDate: new Date().toISOString().split('T')[0],
+      dueDate: lead.expectedCloseDate || new Date(Date.now() + 5 * 86400000).toISOString().split('T')[0]
+    };
+    STATE.assignedTasks.unshift(arshadTask);
+    saveAssignedTasksToStorage();
+    syncAssignedTaskToSupabase(arshadTask);
+  }
+
   saveLeadsToStorage();
   recordAuditLog(
-    'TECH_DELIVERED_FORWARDED',
-    `Technical Department completed build for "${lead.clientName}". Forwarded to Commercial & Marketing Department; Founders and team notified.`,
+    'TECH_DELIVERED_FORWARDED_QC',
+    `Vivek Gajdhane completed technical build for "${lead.clientName}". Forwarded directly to Arshad Shaikh for Final QC (Quality Check); Founder notified.`,
     'Technical Department'
   );
   saveAppStateToStorage();
   syncLeadToSupabase(lead);
 
-  // Point 1: Whenever submitting work to another person, notify founder and co-founder
+  // Founder and Arshad receive notification of QC handover
   createNotification({
-    type: 'TECH_FORWARDED_TO_ARSHAD',
-    title: `📤 Tech Completed: ${lead.clientName}`,
-    message: `Technical Department completed build and forwarded to Commercial & Marketing Department.`,
-    targetRole: 'all',
+    type: 'TECH_FORWARDED_FOR_QC',
+    title: `🔍 Final QC Required: ${lead.clientName}`,
+    message: `Vivek Gajdhane completed technical work and forwarded to Arshad Shaikh for Final Quality Check (QC).`,
+    targetRole: 'founders',
     leadId: lead.id,
     actor: 'Technical Department',
     actorRole: 'vivek'
@@ -5176,8 +7207,52 @@ window.confirmTechForward = function () {
   if (urlEl) urlEl.value = '';
   if (notesEl) notesEl.value = '';
   closeTechForwardModal();
-  showToast('📤 Technical deliverables forwarded to Commercial & Marketing Department! Founders & team notified.');
+  showToast('🔍 Technical deliverables forwarded to Arshad Shaikh for Final QC (Quality Check).');
 
+  renderCurrentTab();
+  renderSidebarNav(STATE.currentTab);
+};
+
+window.forwardVivekTaskToArshad = function (taskId) {
+  if (!requireAuth('forward technical deliverable')) return;
+  const task = (STATE.assignedTasks || []).find((t) => t.id === taskId);
+  if (!task) return;
+
+  task.status = 'completed';
+  task.completedDate = new Date().toISOString().split('T')[0];
+  task.approvedBy = 'Technical Handover to Commercial';
+  saveAssignedTasksToStorage();
+  syncAssignedTaskToSupabase(task);
+
+  const nextTask = {
+    id: 'task-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+    title: `Commercial Review & Packaging: ${task.title}`,
+    description: `Technical Department completed build for "${task.title}". Commercial & Marketing Department to conduct commercial review and client outreach.`,
+    assignedTo: 'mem-02',
+    assignedToName: 'Arshad Shaikh',
+    assignedBy: 'Technical Department (Vivek Gajdhane)',
+    department: 'Commercial & Marketing Department',
+    projectId: task.projectId || 'prj-leadx',
+    projectName: task.projectName || 'LeadX Platform',
+    priority: task.priority || 'HIGH',
+    status: 'assigned',
+    assignedDate: new Date().toISOString().split('T')[0],
+    dueDate: task.dueDate || new Date(Date.now() + 5 * 86400000).toISOString().split('T')[0]
+  };
+  STATE.assignedTasks.unshift(nextTask);
+  saveAssignedTasksToStorage();
+  syncAssignedTaskToSupabase(nextTask);
+
+  createNotification({
+    type: 'TECH_FORWARDED_TO_ARSHAD',
+    title: `Technical Deliverable Forwarded`,
+    message: `Technical Department completed "${task.title}" and forwarded directly to Commercial & Marketing Department (Arshad Shaikh).`,
+    targetRole: 'founders',
+    actor: 'Technical Department',
+    actorRole: 'vivek'
+  });
+
+  showToast(`Work completed and forwarded directly to Commercial Department (Arshad).`);
   renderCurrentTab();
   renderSidebarNav(STATE.currentTab);
 };
@@ -5190,6 +7265,13 @@ window.startArshadCommercialWork = function (leadId) {
   lead.status = 'commercial_in_progress';
   lead.stage = 'commercial_in_progress';
   lead.commercialStartedAt = new Date().toISOString();
+
+  const arshadTask = (STATE.assignedTasks || []).find((t) => t.leadId === lead.id && t.assignedTo === 'mem-02');
+  if (arshadTask) {
+    arshadTask.status = 'in_progress';
+    saveAssignedTasksToStorage();
+    syncAssignedTaskToSupabase(arshadTask);
+  }
 
   saveLeadsToStorage();
   recordAuditLog(
@@ -5248,33 +7330,41 @@ window.confirmArshadSubmitToFounder = function () {
 
   lead.status = 'awaiting_founder_market_approval';
   lead.stage = 'awaiting_founder_market_approval';
-  lead.commercialNotes = commercialNotes || 'Commercial packaging completed. Deal structured and aligned for market launch.';
+  lead.commercialNotes = commercialNotes || 'Final QC passed. Code quality, architecture & delivery readiness verified.';
   lead.commercialCompletedAt = new Date().toISOString();
+  lead.qcSignedOffBy = 'Arshad Shaikh (Co-Founder & CTO)';
+  lead.qcSignedOffAt = new Date().toISOString();
   lead.arshadChecked = true;
+
+  const arshadTask = (STATE.assignedTasks || []).find((t) => t.leadId === lead.id && t.assignedTo === 'mem-02');
+  if (arshadTask) {
+    arshadTask.status = 'review_pending';
+    saveAssignedTasksToStorage();
+    syncAssignedTaskToSupabase(arshadTask);
+  }
 
   saveLeadsToStorage();
   recordAuditLog(
-    'COMMERCIAL_SUBMITTED_TO_FOUNDER',
-    `Commercial & Marketing Department completed packaging for "${lead.clientName}" and submitted to Founder for market clearance.`,
-    'Commercial & Marketing Department'
+    'QC_SIGNED_OFF_FORWARDED_TO_FOUNDER',
+    `Arshad Shaikh (Co-Founder & CTO) signed off Final QC for "${lead.clientName}" and forwarded to Founder Pranav Bansode for Final Delivery.`,
+    'Arshad Shaikh (Co-Founder & CTO)'
   );
   saveAppStateToStorage();
   syncLeadToSupabase(lead);
 
-  // Point 1: Whenever submitting work to another person, notify founder and co-founder
   createNotification({
-    type: 'SUBMITTED_TO_FOUNDER_MARKET',
-    title: `👑 Commercial Ready: ${lead.clientName}`,
-    message: `Commercial & Marketing Department submitted "${lead.clientName}" (${formatINR(lead.dealValue)}) to Founder for Market Clearance.`,
+    type: 'QC_SIGNED_OFF_TO_FOUNDER',
+    title: `🏆 QC Passed: ${lead.clientName}`,
+    message: `Arshad Shaikh verified Final QC for "${lead.clientName}" (${formatINR(lead.dealValue)}). Forwarded to Founder Pranav for Final Delivery.`,
     targetRole: 'all',
     leadId: lead.id,
-    actor: 'Commercial & Marketing Department',
+    actor: 'Arshad Shaikh',
     actorRole: 'arshad'
   });
 
   if (notesEl) notesEl.value = '';
   closeArshadSubmitModal();
-  showToast(`👑 "${lead.clientName}" submitted to Founder for Market Approval! Founders and team notified.`);
+  showToast(`🏆 Final QC signed off for "${lead.clientName}"! Forwarded to Founder for Final Delivery.`);
 
   renderCurrentTab();
   renderSidebarNav(STATE.currentTab);
@@ -5323,12 +7413,12 @@ window.openDeliveryApprovalModal = function (leadId) {
     flowSummary.innerHTML = `
       <div class="space-y-1.5 text-slate-600 dark:text-slate-300">
         <div>🎯 <strong>1. Research &amp; Scouting:</strong> ${escapeHtml(lead.submittedBy || 'Research & Scouting Department')} (${escapeHtml(formatDate(lead.submittedAt))})</div>
-        <div>💻 <strong>2. Technical Engineering Deliverables:</strong> ${
+        <div>💻 <strong>2. Technical Engineering:</strong> ${
           safeUrl
             ? `<a href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer" class="text-blue-600 underline font-mono">${escapeHtml(lead.deliverableUrl)}</a>`
             : `<span class="text-slate-500 font-mono">${escapeHtml(lead.deliverableUrl || 'Completed build')}</span>`
         } <span class="text-xs text-slate-500">(${escapeHtml(lead.techNotes || 'Verified build')})</span></div>
-        <div>🤝 <strong>3. Commercial &amp; Marketing Packaging:</strong> ${escapeHtml(lead.commercialNotes || 'Commercial packaging completed')}</div>
+        <div>🔍 <strong>3. Final QC (Quality Check) Sign-off:</strong> ${escapeHtml(lead.commercialNotes || 'Verified & signed off by Arshad Shaikh (Co-Founder & CTO)')}</div>
       </div>
     `;
   }
@@ -5413,7 +7503,7 @@ window.confirmDeliveryApproval = function () {
 
   if (founderNotesEl) founderNotesEl.value = '';
   closeDeliveryApprovalModal();
-  showToast(`👑 "${lead.clientName}" approved & published in market! Revenue deal enrolled.`);
+  showToast(`🚀 Final Delivery authorized for "${lead.clientName}"! Client solution delivered & revenue enrolled.`);
 
   renderCurrentTab();
   renderSidebarNav(STATE.currentTab);
@@ -5497,15 +7587,15 @@ function renderSalesDone() {
       </div>
 
       <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-        <span class="text-[11px] text-slate-400 font-semibold uppercase">LeadX Product Sales</span>
-        <div class="text-xl font-bold text-blue-600 dark:text-blue-400 mt-1">${formatINR(leadxVal)}</div>
-        <span class="text-[10px] text-blue-500 mt-0.5 block">${leadxSales.length} B2B Deals Closed</span>
+        <span class="text-[11px] text-slate-400 font-semibold uppercase">Completed Deliveries</span>
+        <div class="text-xl font-bold text-purple-600 dark:text-purple-400 mt-1">${activeSales.filter((s) => s.status === 'received').length}</div>
+        <span class="text-[10px] text-purple-500 mt-0.5 block">Handed Over &amp; Reconciled</span>
       </div>
 
       <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-        <span class="text-[11px] text-slate-400 font-semibold uppercase">Smart Review Sales</span>
-        <div class="text-xl font-bold text-purple-600 dark:text-purple-400 mt-1">${formatINR(srmVal)}</div>
-        <span class="text-[10px] text-purple-500 mt-0.5 block">${srmSales.length} Hospitality Deployments</span>
+        <span class="text-[11px] text-slate-400 font-semibold uppercase">Pending Settlements</span>
+        <div class="text-xl font-bold text-amber-600 dark:text-amber-400 mt-1">${formatINR(activeSales.filter((s) => s.status !== 'received').reduce((sum, s) => sum + (Number(s.amount) || 0), 0))}</div>
+        <span class="text-[10px] text-amber-500 mt-0.5 block">Pipeline Realization</span>
       </div>
     </div>
 
@@ -5527,22 +7617,8 @@ function renderSalesDone() {
             STATE.salesProductFilter === 'ALL'
               ? 'bg-[#026047] text-[#fffde8] font-bold shadow-sm'
               : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-          } transition text-xs">
-            All Products (${allSales.length})
-          </button>
-          <button onclick="filterSalesProduct('prj-leadx')" class="px-2.5 py-1 rounded-lg ${
-            STATE.salesProductFilter === 'prj-leadx'
-              ? 'bg-[#026047] text-[#fffde8] font-bold shadow-sm'
-              : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-          } transition text-xs">
-            LeadX (${leadxSales.length})
-          </button>
-          <button onclick="filterSalesProduct('prj-srm')" class="px-2.5 py-1 rounded-lg ${
-            STATE.salesProductFilter === 'prj-srm'
-              ? 'bg-[#026047] text-[#fffde8] font-bold shadow-sm'
-              : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-          } transition text-xs">
-            Smart Review (${srmSales.length})
+          } transition text-xs cursor-pointer">
+            All Sales (${allSales.length})
           </button>
         </div>
       </div>
@@ -5648,9 +7724,9 @@ function renderSalesDone() {
                           </button>
                           ${
                             isReceived
-                              ? `<button onclick="openInvoiceModal('${sId}')"
-                                  class="px-2.5 py-1 rounded-lg bg-[#026047] text-[#fffde8] font-bold text-xs hover:bg-[#024d39] transition flex items-center gap-1 shadow-sm" title="View Official Invoice">
-                                  <span>📄</span> Invoice
+                              ? `<button onclick="downloadInvoicePDF('${sId}')"
+                                  class="px-2.5 py-1 rounded-lg bg-[#026047] text-[#fffde8] font-bold text-xs hover:bg-[#024d39] transition flex items-center gap-1 shadow-sm cursor-pointer" title="Direct 1-Click Invoice PDF Download">
+                                  <span>📥</span> Download PDF
                                 </button>`
                               : isRejected
                               ? `<span class="text-[10px] text-rose-500 italic">Closed</span>`
@@ -6025,19 +8101,9 @@ function renderProjects() {
     return;
   }
 
-  // SUB-VIEW: PRODUCTS LIST
-  let visibleProjects = allProjects;
-  if (STATE.projectListFilter !== 'ALL') {
-    visibleProjects = visibleProjects.filter((p) => {
-      const details = techDetails[p.id] || {};
-      const cat = details.category || p.description || '';
-      if (STATE.projectListFilter === 'B2B')
-        return p.id === 'prj-leadx' || cat.includes('B2B');
-      if (STATE.projectListFilter === 'AI')
-        return p.id === 'prj-srm' || cat.includes('Sentiment');
-      return true;
-    });
-  }
+  // SUB-VIEW: LIVE PRODUCTS LIST (Active in-progress initiatives like PRP-GodownPro)
+  const liveProjects = allProjects.filter((p) => p.status !== 'completed');
+  let visibleProjects = liveProjects;
 
   if (STATE.projectListSearch) {
     visibleProjects = visibleProjects.filter((p) => {
@@ -6053,9 +8119,9 @@ function renderProjects() {
     <!-- Top Section Header -->
     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
       <div class="flex items-center gap-2">
-        <span class="px-2 py-0.5 rounded text-[10px] font-black bg-[#026047] text-[#fffde8] uppercase tracking-wider">Products</span>
-        <h2 class="text-base font-bold text-slate-900 dark:text-white">Designed Products &amp; Platforms</h2>
-        <span class="text-xs text-slate-400 font-semibold">(${allProjects.length} Active)</span>
+        <span class="px-2 py-0.5 rounded text-[10px] font-black bg-[#026047] text-[#fffde8] uppercase tracking-wider">Live Projects</span>
+        <h2 class="text-base font-bold text-slate-900 dark:text-white">Active In-Progress Products</h2>
+        <span class="text-xs text-slate-400 font-semibold">(${liveProjects.length} In-Progress)</span>
       </div>
       <div class="flex items-center gap-2 self-start sm:self-auto flex-wrap">
         <button onclick="viewProjectFinance('ALL')"
@@ -6075,7 +8141,7 @@ function renderProjects() {
         <div class="relative flex-1 sm:w-64">
           <input
             type="text"
-            placeholder="Search our designed products..."
+            placeholder="Search active live products..."
             value="${escapeHtml(STATE.projectListSearch || '')}"
             oninput="handleProjectSearch(this.value)"
             class="w-full pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:outline-none focus:border-[#026047]"
@@ -6083,26 +8149,8 @@ function renderProjects() {
           <span class="absolute left-2.5 top-2 text-slate-400">🔍</span>
         </div>
         <div class="flex items-center gap-1">
-          <button onclick="filterProjectList('ALL')" class="px-2.5 py-1 rounded-lg ${
-            STATE.projectListFilter === 'ALL'
-              ? 'bg-[#026047] text-[#fffde8] font-bold shadow-sm'
-              : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-          } transition text-xs cursor-pointer">
-            All Products (${allProjects.length})
-          </button>
-          <button onclick="filterProjectList('B2B')" class="px-2.5 py-1 rounded-lg ${
-            STATE.projectListFilter === 'B2B'
-              ? 'bg-[#026047] text-[#fffde8] font-bold shadow-sm'
-              : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-          } transition text-xs cursor-pointer">
-            1) LeadX
-          </button>
-          <button onclick="filterProjectList('AI')" class="px-2.5 py-1 rounded-lg ${
-            STATE.projectListFilter === 'AI'
-              ? 'bg-[#026047] text-[#fffde8] font-bold shadow-sm'
-              : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-          } transition text-xs cursor-pointer">
-            2) Smart Review
+          <button onclick="filterProjectList('ALL')" class="px-2.5 py-1 rounded-lg bg-[#026047] text-[#fffde8] font-bold shadow-sm transition text-xs cursor-pointer">
+            All Live Products (${liveProjects.length})
           </button>
         </div>
       </div>
@@ -6224,6 +8272,147 @@ window.submitNewProject = function () {
   showToast(`Project ${name} created and connected to Finance Dashboard.`);
 };
 
+// ==============================================================================
+// COMPLETED PROJECTS & DELIVERABLES TRACKER
+// Archival ledger of delivered solutions, sign-offs, repos & recognized value
+// ==============================================================================
+function renderCompletedProjects() {
+  const container = document.getElementById('completed-projects-container');
+  if (!container) return;
+
+  const completedLeads = (STATE.leads || []).filter(
+    (l) => l.status === 'published_to_market' || l.status === 'approved_for_delivery' || l.stage === 'published_to_market'
+  );
+
+  const completedArchived = [
+    {
+      id: 'comp-prj-01',
+      code: 'PTS-DELIV-001',
+      name: 'LeadX Enterprise Core Engine v1.0',
+      clientName: 'Apex Capital Solutions',
+      category: 'B2B Client Acquisition Engine',
+      completedAt: '2026-10-18',
+      dealValue: 185000,
+      techLead: 'Vivek Gajdhane (Technical Lead)',
+      commercialLead: 'Arshad Shaikh (Co-Founder & CTO)',
+      repoUrl: 'https://github.com/phoenixtech/leadx-core',
+      demoUrl: 'https://leadx.phoenixtech.com',
+      notes: 'Full production deployment completed with automated lead capture & verified deliverable handover.',
+      badge: 'Delivered & Handed Over'
+    },
+    {
+      id: 'comp-prj-02',
+      code: 'PTS-DELIV-002',
+      name: 'Smart Review Management Sentiment Funnel',
+      clientName: 'Grand Horizon Hospitality Group',
+      category: 'Customer Intelligence & Review Interception',
+      completedAt: '2026-11-04',
+      dealValue: 95000,
+      techLead: 'Vivek Gajdhane (Technical Lead)',
+      commercialLead: 'Arshad Shaikh (Co-Founder & CTO)',
+      repoUrl: 'https://github.com/phoenixtech/srm-sentiment-engine',
+      demoUrl: 'https://srm.phoenixtech.com',
+      notes: 'Private feedback interception gateway deployed, QR integration validated, and staff dashboard operational.',
+      badge: 'Delivered & Handed Over'
+    }
+  ];
+
+  const dynamicCompleted = completedLeads.map((l) => ({
+    id: l.id,
+    code: l.leadNumber || 'PTS-DEAL',
+    name: `${l.clientName} - ${l.productType || 'Custom Solution'}`,
+    clientName: l.clientName,
+    category: l.productType || 'Custom Tech Development',
+    completedAt: l.approvedAt ? l.approvedAt.split('T')[0] : (l.submittedAt ? l.submittedAt.split('T')[0] : '2026-11-15'),
+    dealValue: Number(l.dealValue) || 0,
+    techLead: 'Vivek Gajdhane (Technical Lead)',
+    commercialLead: 'Arshad Shaikh (Co-Founder & CTO)',
+    repoUrl: l.deliverableUrl || 'https://github.com/phoenixtech/client-delivery',
+    demoUrl: l.demoUrl || '',
+    notes: l.deliveryNotes || l.techNotes || 'Successfully engineered, packaged, and published in market.',
+    badge: 'Delivered & Handed Over'
+  }));
+
+  const allCompleted = [...completedArchived, ...dynamicCompleted];
+  const totalRevenue = allCompleted.reduce((sum, p) => sum + (Number(p.dealValue) || 0), 0);
+
+  container.innerHTML = `
+    <!-- Top Summary Banner -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <span class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Completed Deliverables</span>
+        <div class="text-2xl font-black text-[#026047] dark:text-emerald-400 mt-1">${allCompleted.length}</div>
+        <span class="text-[10px] text-emerald-600 font-semibold block mt-0.5">100% Verified Handover</span>
+      </div>
+      <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <span class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Delivered Contract Sum</span>
+        <div class="text-2xl font-black text-slate-900 dark:text-white mt-1">${formatINR(totalRevenue)}</div>
+        <span class="text-[10px] text-slate-500 font-medium block mt-0.5">Recognized Closed Revenue</span>
+      </div>
+      <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <span class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Technical Sign-off</span>
+        <div class="text-2xl font-black text-purple-600 dark:text-purple-400 mt-1">100%</div>
+        <span class="text-[10px] text-purple-500 font-semibold block mt-0.5">CTO & Technical Architect Verified</span>
+      </div>
+    </div>
+
+    <!-- Completed Projects Vertical List -->
+    <div class="space-y-3">
+      ${allCompleted.map((p, idx) => `
+        <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:border-[#026047] transition space-y-4">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-[#026047] text-[#fffde8] font-black text-xs flex items-center justify-center shadow-xs shrink-0">
+                0${idx + 1}
+              </div>
+              <div>
+                <div class="flex items-center gap-2 flex-wrap">
+                  <h3 class="text-sm font-extrabold text-slate-900 dark:text-white">${escapeHtml(p.name)}</h3>
+                  <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#fffde8] text-[#026047] border border-[#026047]/30">
+                    ${escapeHtml(p.code)}
+                  </span>
+                  <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                    ✅ ${escapeHtml(p.badge)}
+                  </span>
+                </div>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Client: <strong class="text-slate-700 dark:text-slate-300">${escapeHtml(p.clientName)}</strong> &bull; Completed on: ${escapeHtml(p.completedAt)}
+                </p>
+              </div>
+            </div>
+            <div class="text-right sm:self-center">
+              <span class="text-[10px] text-slate-400 uppercase font-bold block">Contract Value</span>
+              <span class="text-base font-black text-[#026047] dark:text-emerald-400">${formatINR(p.dealValue)}</span>
+            </div>
+          </div>
+
+          <!-- Technical & Commercial Sign-off Details -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-slate-50 dark:bg-slate-800/40 p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-800">
+            <div>
+              <span class="text-[10px] text-slate-400 uppercase font-bold block">Technical Architecture Sign-off</span>
+              <div class="font-bold text-slate-800 dark:text-slate-200 mt-0.5">${escapeHtml(p.techLead)}</div>
+              ${p.repoUrl ? `
+                <div class="mt-1 flex items-center gap-1.5 text-blue-600 dark:text-blue-400 font-mono text-[11px] truncate">
+                  <span>🔗 Repo:</span>
+                  <a href="${escapeHtml(sanitizeUrl(p.repoUrl))}" target="_blank" rel="noopener noreferrer" class="hover:underline truncate">${escapeHtml(p.repoUrl)}</a>
+                </div>
+              ` : ''}
+            </div>
+            <div>
+              <span class="text-[10px] text-slate-400 uppercase font-bold block">Commercial & CTO Sign-off</span>
+              <div class="font-bold text-slate-800 dark:text-slate-200 mt-0.5">${escapeHtml(p.commercialLead)}</div>
+              <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-snug truncate">
+                ${escapeHtml(p.notes)}
+              </p>
+            </div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+window.renderCompletedProjects = renderCompletedProjects;
+
 function renderIncome() {
   renderFounderDashboard();
 }
@@ -6241,11 +8430,11 @@ function generateInvoiceCardHTML(inc) {
       <!-- Header -->
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-5">
         <div class="flex items-center gap-3">
-          <img src="logo-icon-ivory.png" alt="Phoenix Tech Logo" class="h-12 w-12 object-contain p-2 rounded-xl bg-[#026047] shrink-0" />
+          <img src="logo-emerald-transparent.png" alt="Phoenix Tech Logo" class="h-12 w-12 object-contain shrink-0" onerror="this.src='logo-black-transparent.png'" />
           <div>
             <h2 class="text-lg font-black tracking-wider text-[#026047] uppercase leading-tight">Phoenix Tech Solutions</h2>
             <div class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">Private Limited</div>
-            <div class="text-[10px] text-slate-400">Corporate Finance &amp; Client Revenue Desk</div>
+            <div class="text-[10px] text-slate-500 mt-0.5">11-B, Lane No, opposite Etasha Society, Bharat Colony, Sayad Nagar, Hadapsar, Pune, Maharashtra 411028</div>
           </div>
         </div>
         <div class="sm:text-right">
@@ -6385,54 +8574,60 @@ window.printCurrentInvoice = function () {
   printWin.document.close();
 };
 
-window.downloadCurrentInvoice = function () {
+window.downloadInvoicePDF = function (invoiceId) {
   if (!requireAuth('download invoices')) return;
-  if (!STATE.currentInvoiceId) return;
-  const inc = (STATE.income || []).find((i) => i.id === STATE.currentInvoiceId);
-  if (!inc || inc.status !== 'received') return;
+  const id = invoiceId || STATE.currentInvoiceId;
+  if (!id) return;
+  const inc = (STATE.income || []).find((i) => i.id === id);
+  if (!inc || inc.status !== 'received') {
+    showToast('Only approved & received invoices can be downloaded.');
+    return;
+  }
 
-  const invoiceBody = generateInvoiceCardHTML(inc);
-  const fullHtml = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Invoice - ${escapeHtml(inc.clientName)} - ${escapeHtml(inc.id)}</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-    body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f8fafc; padding: 2rem; }
-    @media print {
-      body { background: white; padding: 0; }
-      .no-print { display: none !important; }
-    }
-  </style>
-</head>
-<body class="max-w-3xl mx-auto">
-  <div class="no-print mb-4 flex justify-between items-center bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
-    <div>
-      <span class="text-xs font-bold text-slate-800">Phoenix Tech Solutions Private Limited</span>
-      <span class="text-[11px] text-slate-500 block">Official Verified Payment Invoice Receipt</span>
-    </div>
-    <button onclick="window.print()" style="background:#026047;color:#fffde8;padding:7px 16px;font-size:12px;font-weight:bold;border-radius:8px;border:none;cursor:pointer;">
-      Print / Save as PDF
-    </button>
-  </div>
-  ${invoiceBody}
-</body>
-</html>`;
+  showToast(`Generating direct PDF invoice for ${inc.clientName}...`);
 
-  const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `Invoice-${inc.clientName.replace(/[^a-zA-Z0-9]/g, '_')}-${safeId(inc.id)}.html`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-  showToast(`Invoice for ${inc.clientName} downloaded successfully!`);
+  const container = document.createElement('div');
+  container.id = 'temp-pdf-invoice-container';
+  container.style.position = 'fixed';
+  container.style.left = '-9999px';
+  container.style.top = '0';
+  container.style.width = '794px'; // standard A4 pixel width at 96dpi
+  container.style.background = '#ffffff';
+  container.style.padding = '20px';
+  container.innerHTML = generateInvoiceCardHTML(inc);
+  document.body.appendChild(container);
+
+  const cleanClient = inc.clientName.replace(/[^a-zA-Z0-9]/g, '_');
+  const filename = `PTS-Invoice-${cleanClient}-${safeId(inc.id)}.pdf`;
+
+  if (window.html2pdf) {
+    const opt = {
+      margin: [10, 10, 10, 10],
+      filename: filename,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true, logging: false },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+
+    window.html2pdf()
+      .set(opt)
+      .from(container.firstElementChild || container)
+      .save()
+      .then(() => {
+        if (container.parentNode) document.body.removeChild(container);
+        showToast(`✅ Direct PDF invoice downloaded: ${filename}`);
+      })
+      .catch((err) => {
+        console.error('html2pdf generation error, using printable view fallback:', err);
+        if (container.parentNode) document.body.removeChild(container);
+        window.printCurrentInvoice();
+      });
+  } else {
+    if (container.parentNode) document.body.removeChild(container);
+    window.printCurrentInvoice();
+  }
 };
+window.downloadCurrentInvoice = window.downloadInvoicePDF;
 
 window.approveIncome = function (id) {
   if (!requireFounder('approve client inflows')) return;
