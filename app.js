@@ -3851,25 +3851,7 @@ window.handleCommonLogin = async function () {
       console.warn('[Phoenix Auth] Supabase Auth check skipped:', sbErr.message);
     }
 
-    // 3. OFFLINE / LOCAL SYNCHRONIZED CREDENTIAL VERIFICATION
-    let matchedMember = null;
-    for (const key of Object.keys(MEMBER_CREDENTIALS)) {
-      const mem = MEMBER_CREDENTIALS[key];
-      const match = mem.validIds.some((v) => {
-        const cleanV = v.toLowerCase().replace(/[\s\-_]/g, '');
-        return (
-          cleanV === cleanId ||
-          v.toLowerCase() === lowerId ||
-          mem.name.toLowerCase() === lowerId ||
-          mem.email.toLowerCase() === lowerId
-        );
-      });
-      if (match) {
-        matchedMember = mem;
-        break;
-      }
-    }
-
+    // 3. FINAL VERIFICATION / ERROR REPORTING
     if (!matchedMember) {
       recordFailedLoginAttempt();
       showLoginError(`User "${rawId}" not found. Authorized IDs: PB-01 (Pranav), AS-02 (Arshad), VG-03 (Vivek), AB-04 (Aryan).`);
