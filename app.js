@@ -815,11 +815,22 @@ function loadAssignedTasksFromStorage() {
   }
 }
 
-async function syncTasksFromSupabase() {
+let _isSyncingTasks = false;
+let _lastSyncTime = 0;
+
+async function syncTasksFromSupabase(force = false) {
   if (!STATE.isAuthenticated) return;
+  const now = Date.now();
+  if (!force && _isSyncingTasks) return;
+  if (!force && now - _lastSyncTime < 4000) return;
+  _isSyncingTasks = true;
+  _lastSyncTime = now;
   loadAssignedTasksFromStorage();
   const sb = getSupabaseClient();
-  if (!sb) return;
+  if (!sb) {
+    _isSyncingTasks = false;
+    return;
+  }
   try {
     const { data, error } = await sb
       .from('assigned_tasks')
@@ -828,6 +839,7 @@ async function syncTasksFromSupabase() {
 
     if (error) {
       console.warn('Supabase fetch tasks error:', error.message);
+      _isSyncingTasks = false;
       return;
     }
 
@@ -838,16 +850,17 @@ async function syncTasksFromSupabase() {
       } catch (e) { tombstone = []; }
       const deletedSet = new Set(tombstone);
 
-      // Clean up orphaned deleted tasks in Supabase
+      // Clean up orphaned deleted tasks in Supabase in a single batch
       const toDeleteFromRemote = data.filter((row) =>
         deletedSet.has(row.id) ||
         deletedSet.has(row.title) ||
         /apex health/i.test(row.title || '') ||
         /metropolis gym/i.test(row.title || '')
       );
-      toDeleteFromRemote.forEach(async (row) => {
-        await sb.from('assigned_tasks').delete().eq('id', row.id).catch(() => {});
-      });
+      if (toDeleteFromRemote.length > 0) {
+        const idsToDelete = toDeleteFromRemote.map((r) => r.id);
+        sb.from('assigned_tasks').delete().in('id', idsToDelete).then(() => {}).catch(() => {});
+      }
 
       const activeRows = data.filter((row) =>
         !deletedSet.has(row.id) &&
@@ -884,6 +897,8 @@ async function syncTasksFromSupabase() {
     }
   } catch (err) {
     console.warn('Supabase sync error:', err);
+  } finally {
+    _isSyncingTasks = false;
   }
 }
 
@@ -3721,6 +3736,33 @@ window.handleCommonLogin = async function () {
   if (submitBtnText) submitBtnText.textContent = 'Verifying Credentials...';
 
   try {
+    // 0. FAST IN-MEMORY VERIFICATION (Instant <1ms Sign-In for Official Members)
+    let matchedMember = null;
+    for (const key of Object.keys(MEMBER_CREDENTIALS)) {
+      const mem = MEMBER_CREDENTIALS[key];
+      const match = mem.validIds.some((v) => {
+        const cleanV = v.toLowerCase().replace(/[\s\-_]/g, '');
+        return (
+          cleanV === cleanId ||
+          v.toLowerCase() === lowerId ||
+          mem.name.toLowerCase() === lowerId ||
+          mem.email.toLowerCase() === lowerId
+        );
+      });
+      if (match) {
+        matchedMember = mem;
+        break;
+      }
+    }
+
+    if (matchedMember && matchedMember.validPasswords.includes(rawPass)) {
+      if (errBox) errBox.classList.add('hidden');
+      loginAsUser(matchedMember.role, false);
+      recordAuditLog('USER_LOGIN', `Authenticated via credentials as ${matchedMember.name} (${matchedMember.memberCode})`, matchedMember.name);
+      showToast(`Welcome, ${matchedMember.name}! Signed in successfully.`);
+      return;
+    }
+
     // 1. SUPABASE DATABASE AUTHENTICATION (Targeted query on public.users)
     const sb = getSupabaseClient();
     if (sb) {
