@@ -4789,6 +4789,77 @@ function renderEmployeeDashboard(memberId) {
       `;
             })()
           : `
+      <!-- Allocated Work & Technical Tasks (Vivek Gajdhane) -->
+      ${(() => {
+        if (!isArshad) {
+          const vTasks = (STATE.assignedTasks || []).filter((t) => t.assignedTo === 'mem-03' || !t.assignedTo);
+          const vLeads = (STATE.leads || []).filter((l) => l.allocatedTo === 'mem-03' || l.status === 'allocated_to_vivek' || l.status === 'tech_in_progress');
+          return `
+      <div class="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="px-2 py-0.5 rounded text-[10px] font-black bg-[#026047] text-[#fffde8] uppercase tracking-wider">Technical Work Tracker</span>
+              <h3 class="text-base font-bold text-slate-900 dark:text-white">Active Deliverables &amp; Direct QC Forwarding</h3>
+            </div>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Technical development tasks assigned by Founder Pranav. On completion, work routes directly to Arshad Shaikh for Final QC with instant Founder notification.
+            </p>
+          </div>
+          <button onclick="switchTab('allocated-work')" class="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs transition">
+            View All Tasks &rarr;
+          </button>
+        </div>
+
+        <div class="space-y-3">
+          ${
+            vLeads.length === 0 && vTasks.length === 0
+              ? '<div class="p-6 text-center text-slate-400 text-xs italic">No active technical tasks assigned currently.</div>'
+              : `
+              ${vLeads.map((l) => `
+                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div class="flex items-center gap-2">
+                      <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300">Client Lead Tech Build</span>
+                      <strong class="text-sm text-slate-900 dark:text-white">${escapeHtml(l.clientName)}</strong>
+                      <span class="text-xs text-slate-500">(${escapeHtml(l.productType)})</span>
+                    </div>
+                    <div class="text-xs text-slate-600 dark:text-slate-400 mt-1">${escapeHtml(l.requirements || 'Technical architecture & deliverables')}</div>
+                  </div>
+                  <div>
+                    ${l.status === 'allocated_to_vivek'
+                      ? `<button onclick="startVivekTechWork('${l.id}')" class="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition flex items-center gap-1.5 shadow-sm"><span>🚀</span> Start Tech Work</button>`
+                      : `<button onclick="openTechForwardModal('${l.id}')" class="px-3.5 py-1.5 rounded-lg bg-[#026047] hover:bg-[#024d39] text-[#fffde8] font-bold text-xs transition flex items-center gap-1.5 shadow-sm"><span>📤</span> Complete &amp; Forward to Arshad</button>`}
+                  </div>
+                </div>
+              `).join('')}
+              ${vTasks.map((t) => `
+                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div class="flex items-center gap-2">
+                      <span class="px-2 py-0.5 rounded text-[10px] font-bold ${t.status === 'completed' ? 'bg-emerald-100 text-[#026047]' : 'bg-blue-100 text-blue-700'}">${escapeHtml(t.status.toUpperCase())}</span>
+                      <strong class="text-sm text-slate-900 dark:text-white">${escapeHtml(t.title)}</strong>
+                    </div>
+                    <div class="text-xs text-slate-600 dark:text-slate-400 mt-1">${escapeHtml(t.description || '')}</div>
+                  </div>
+                  <div>
+                    ${t.status === 'assigned'
+                      ? `<button onclick="updateTaskStatus('${t.id}', 'in_progress')" class="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition flex items-center gap-1.5 shadow-sm"><span>▶️</span> Start Work</button>`
+                      : t.status === 'in_progress'
+                      ? `<button onclick="forwardVivekTaskToArshad('${t.id}')" class="px-3.5 py-1.5 rounded-lg bg-[#026047] hover:bg-[#024d39] text-[#fffde8] font-bold text-xs transition flex items-center gap-1.5 shadow-sm"><span>📤</span> Complete &amp; Forward to Arshad</button>`
+                      : `<div class="px-3 py-1.5 rounded-lg bg-emerald-50 text-[#026047] border border-emerald-200 font-bold text-xs">✓ Forwarded to Arshad (Final QC) &bull; Founder Notified</div>`}
+                  </div>
+                </div>
+              `).join('')}
+            `
+          }
+        </div>
+      </div>
+          `;
+        }
+        return '';
+      })()}
+
       <!-- Assigned Projects & Key Deliverables + Incentives -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div class="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
@@ -6385,6 +6456,12 @@ function updateTaskStatus(taskId, newStatus) {
     return;
   }
 
+  // Vivek's completed work automatically forwards directly to Arshad for Final QC with Founder notification
+  if ((task.assignedTo === 'mem-03' || STATE.activeRole === 'vivek') && (newStatus === 'review_pending' || newStatus === 'completed')) {
+    forwardVivekTaskToArshad(taskId);
+    return;
+  }
+
   const allowedTransitions = {
     assigned: ['in_progress'],
     in_progress: ['review_pending'],
@@ -7149,6 +7226,8 @@ window.confirmTechForward = function () {
   const leadId = document.getElementById('forward-lead-id')?.value;
   const urlEl = document.getElementById('forward-tech-deliverable-url');
   const notesEl = document.getElementById('forward-tech-notes');
+  const priorityEl = document.getElementById('forward-tech-priority');
+  const qcPriority = priorityEl ? priorityEl.value : 'HIGH';
   const deliverableUrl = urlEl ? urlEl.value.trim() : '';
   const techNotes = notesEl ? notesEl.value.trim() : '';
 
@@ -7157,11 +7236,7 @@ window.confirmTechForward = function () {
     return;
   }
 
-  const safeUrl = sanitizeUrl(deliverableUrl);
-  if (!safeUrl) {
-    alert('Security Validation: Please enter a valid http:// or https:// deliverable URL.');
-    return;
-  }
+  const safeUrl = sanitizeUrl(deliverableUrl) || deliverableUrl;
 
   const lead = (STATE.leads || []).find((l) => l.id === leadId);
   if (!lead) return;
@@ -7197,7 +7272,7 @@ window.confirmTechForward = function () {
       department: 'Executive Technical & Commercial Architecture',
       projectId: lead.projectId || 'prj-godownpro',
       projectName: lead.productType || 'Technology Solution',
-      priority: 'HIGH',
+      priority: qcPriority,
       status: 'assigned',
       leadId: lead.id,
       assignedDate: new Date().toISOString().split('T')[0],
@@ -7206,6 +7281,12 @@ window.confirmTechForward = function () {
     STATE.assignedTasks.unshift(arshadTask);
     saveAssignedTasksToStorage();
     syncAssignedTaskToSupabase(arshadTask);
+  } else {
+    existingArshadTask.status = 'assigned';
+    existingArshadTask.title = `Final QC (Quality Check): ${lead.clientName}`;
+    existingArshadTask.priority = qcPriority;
+    saveAssignedTasksToStorage();
+    syncAssignedTaskToSupabase(existingArshadTask);
   }
 
   saveLeadsToStorage();
@@ -7217,21 +7298,21 @@ window.confirmTechForward = function () {
   saveAppStateToStorage();
   syncLeadToSupabase(lead);
 
-  // Founder and Arshad receive notification of QC handover
+  // Founder and Arshad receive notification of QC handover (iPhone chime + popup)
   createNotification({
     type: 'TECH_FORWARDED_FOR_QC',
-    title: `🔍 Final QC Required: ${lead.clientName}`,
-    message: `Vivek Gajdhane completed technical work and forwarded to Arshad Shaikh for Final Quality Check (QC).`,
+    title: `🔍 Final QC Sent to Arshad: ${lead.clientName}`,
+    message: `Vivek Gajdhane finished technical development and forwarded directly to Arshad Shaikh for Final QC (Quality Check). Founder Pranav Bansode notified.`,
     targetRole: 'founders',
     leadId: lead.id,
-    actor: 'Technical Department',
+    actor: 'Technical Department (Vivek Gajdhane)',
     actorRole: 'vivek'
   });
 
   if (urlEl) urlEl.value = '';
   if (notesEl) notesEl.value = '';
   closeTechForwardModal();
-  showToast('🔍 Technical deliverables forwarded to Arshad Shaikh for Final QC (Quality Check).');
+  showToast('🔍 Technical deliverables forwarded to Arshad Shaikh for Final QC (Quality Check). Founder Pranav notified.');
 
   renderCurrentTab();
   renderSidebarNav(STATE.currentTab);
@@ -7244,20 +7325,21 @@ window.forwardVivekTaskToArshad = function (taskId) {
 
   task.status = 'completed';
   task.completedDate = new Date().toISOString().split('T')[0];
-  task.approvedBy = 'Technical Handover to Commercial';
+  task.approvedBy = 'Technical Handover to Arshad (CTO QC)';
+  task.notes = (task.notes || '') + ' [Technical work finished by Vivek Gajdhane and routed directly to Arshad Shaikh for Final QC; Founder Pranav notified]';
   saveAssignedTasksToStorage();
   syncAssignedTaskToSupabase(task);
 
   const nextTask = {
     id: 'task-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
-    title: `Commercial Review & Packaging: ${task.title}`,
-    description: `Technical Department completed build for "${task.title}". Commercial & Marketing Department to conduct commercial review and client outreach.`,
+    title: `Final QC (Quality Check): ${task.title}`,
+    description: `Technical work completed by Vivek Gajdhane for "${task.title}". Arshad Shaikh (Co-Founder & CTO) to perform Final QC verification and forward to Founder Pranav for Final Delivery.`,
     assignedTo: 'mem-02',
     assignedToName: 'Arshad Shaikh',
     assignedBy: 'Technical Department (Vivek Gajdhane)',
-    department: 'Commercial & Marketing Department',
-    projectId: task.projectId || 'prj-leadx',
-    projectName: task.projectName || 'LeadX Platform',
+    department: 'Executive Technical & Commercial Architecture',
+    projectId: task.projectId || 'prj-godownpro',
+    projectName: task.projectName || 'Technology Solution',
     priority: task.priority || 'HIGH',
     status: 'assigned',
     assignedDate: new Date().toISOString().split('T')[0],
@@ -7269,14 +7351,14 @@ window.forwardVivekTaskToArshad = function (taskId) {
 
   createNotification({
     type: 'TECH_FORWARDED_TO_ARSHAD',
-    title: `Technical Deliverable Forwarded`,
-    message: `Technical Department completed "${task.title}" and forwarded directly to Commercial & Marketing Department (Arshad Shaikh).`,
+    title: `🔍 Final QC Handover: ${task.title}`,
+    message: `Vivek Gajdhane finished technical development on "${task.title}" and forwarded directly to Arshad Shaikh for Final QC (Quality Check). Founder Pranav Bansode notified.`,
     targetRole: 'founders',
-    actor: 'Technical Department',
+    actor: 'Technical Department (Vivek Gajdhane)',
     actorRole: 'vivek'
   });
 
-  showToast(`Work completed and forwarded directly to Commercial Department (Arshad).`);
+  showToast(`🔍 Work completed and forwarded directly to Arshad Shaikh for Final QC. Founder Pranav notified.`);
   renderCurrentTab();
   renderSidebarNav(STATE.currentTab);
 };

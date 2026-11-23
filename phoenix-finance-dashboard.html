@@ -1671,7 +1671,7 @@
             </span>
             <div>
               <h3 class="font-bold text-sm text-slate-900 dark:text-white">Complete &amp; Forward to Arshad for Final QC</h3>
-              <p class="text-[11px] text-slate-500">Technical Engineering Handover &bull; Final QC Verification by Arshad Shaikh</p>
+              <p class="text-[11px] text-slate-500">Direct Handover to Arshad Shaikh (CTO) &bull; Auto-Notifying Founder Pranav</p>
             </div>
           </div>
           <button onclick="closeTechForwardModal()"
@@ -1687,7 +1687,46 @@
               <strong id="forward-lead-client-display" class="text-slate-900 dark:text-white"></strong>
             </div>
             <div class="text-[11px] text-purple-600 dark:text-purple-400">
-              Technical work will be submitted directly to Arshad Shaikh (Co-Founder &amp; CTO) for Final QC (Quality Check). Once QC passes, it routes to Founder Pranav Bansode for Final Delivery.
+              Technical work will be delivered directly to Arshad Shaikh (Co-Founder &amp; CTO) for Final QC (Quality Check). Founder Pranav Bansode is notified automatically in real time.
+            </div>
+          </div>
+
+          <!-- Handover & Workflow Settings in the Form -->
+          <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-2.5">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                <span>⚙️</span> Handover &amp; Routing Settings
+              </span>
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-[#026047] dark:text-emerald-300">
+                Direct Handover Active
+              </span>
+            </div>
+            
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div>
+                <label class="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Forward Directly To</label>
+                <select id="forward-tech-recipient" class="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white font-medium focus:outline-none focus:border-[#026047]">
+                  <option value="mem-02" selected>Arshad Shaikh (Co-Founder &amp; CTO — Final QC)</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">QC Verification Priority</label>
+                <select id="forward-tech-priority" class="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white font-medium focus:outline-none focus:border-[#026047]">
+                  <option value="HIGH" selected>High Priority — Final QC Check</option>
+                  <option value="URGENT">Urgent Client Handover</option>
+                  <option value="NORMAL">Standard QC Review</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between pt-1 border-t border-slate-200 dark:border-slate-700">
+              <div class="flex items-center gap-2">
+                <input type="checkbox" id="forward-tech-notify-founder" checked disabled class="w-3.5 h-3.5 text-[#026047] rounded border-slate-300" />
+                <label for="forward-tech-notify-founder" class="text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                  Notify Founder Pranav Bansode (Real-Time Chime &amp; Banner)
+                </label>
+              </div>
+              <span class="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">Enabled</span>
             </div>
           </div>
 
