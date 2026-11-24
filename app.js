@@ -8479,56 +8479,87 @@ function renderProjects() {
       </div>
     </div>
 
-    <!-- Completed Projects List -->
-    <div class="space-y-3">
-      ${
-        visibleProjects.length === 0
-            ? `<div class="p-12 text-center text-slate-400 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
-               <span class="text-3xl block mb-2">🔍</span>
-               <p class="font-semibold text-slate-600 dark:text-slate-300">No completed projects match your search or filter.</p>
-               <button onclick="filterProjectList('ALL'); handleProjectSearch('');" class="mt-3 px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-300">Reset Filters</button>
-             </div>`
-            : visibleProjects
-                .map((p, idx) => {
-                  const itemNum = String(idx + 1).padStart(2, '0');
-                  const val = Number(p.dealValue) || 0;
-
-                  return `
-                <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:border-[#026047] transition space-y-3">
-                  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
-                    <div class="flex items-center gap-3">
-                      <div class="w-10 h-10 rounded-xl bg-[#026047] text-[#fffde8] font-black text-xs flex items-center justify-center shadow-xs shrink-0">
-                        ${itemNum}
-                      </div>
-                      <div>
-                        <div class="flex items-center gap-2 flex-wrap">
-                          <h3 class="text-sm font-extrabold text-slate-900 dark:text-white">${escapeHtml(p.name)}</h3>
-                          <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#fffde8] text-[#026047] border border-[#026047]/30">
-                            ${escapeHtml(p.code)}
+    <!-- Completed Projects List View (Table Format) -->
+    <div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+      <table class="w-full text-left text-xs min-w-[800px]">
+        <thead class="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 tracking-wider">
+          <tr>
+            <th class="py-3 px-3.5 w-12 text-center">#</th>
+            <th class="py-3 px-3.5">Project Solution &amp; Scope</th>
+            <th class="py-3 px-3.5">Client</th>
+            <th class="py-3 px-3.5">Category</th>
+            <th class="py-3 px-3.5">Completed Date</th>
+            <th class="py-3 px-3.5">Deal Value</th>
+            <th class="py-3 px-3.5">Verification &amp; Sign-off</th>
+            <th class="py-3 px-3.5 text-right">Actions / Deliverables</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+          ${
+            visibleProjects.length === 0
+              ? `<tr>
+                  <td colspan="8" class="p-10 text-center text-slate-400">
+                    <span class="text-3xl block mb-2">🔍</span>
+                    <p class="font-semibold text-slate-600 dark:text-slate-300">No completed projects match your search or filter.</p>
+                    <button onclick="filterProjectList('ALL'); handleProjectSearch('');" class="mt-3 px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer">Reset Filters</button>
+                  </td>
+                </tr>`
+              : visibleProjects
+                  .map((p, idx) => {
+                    const itemNum = String(idx + 1).padStart(2, '0');
+                    const val = Number(p.dealValue) || 0;
+                    return `
+                      <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition border-b border-slate-100 dark:border-slate-800">
+                        <td class="py-3.5 px-3.5 text-center font-mono">
+                          <span class="w-7 h-7 rounded-lg bg-[#026047] text-[#fffde8] font-bold text-[11px] inline-flex items-center justify-center shadow-xs">
+                            ${itemNum}
                           </span>
-                          <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                        </td>
+                        <td class="py-3.5 px-3.5">
+                          <div class="font-bold text-slate-900 dark:text-white flex items-center gap-1.5 flex-wrap">
+                            <span class="text-xs">${escapeHtml(p.name)}</span>
+                            <span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-[#fffde8] text-[#026047] border border-[#026047]/30">
+                              ${escapeHtml(p.code)}
+                            </span>
+                          </div>
+                          <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-1 max-w-sm">
+                            ${escapeHtml(p.notes)}
+                          </div>
+                        </td>
+                        <td class="py-3.5 px-3.5 whitespace-nowrap">
+                          <span class="font-semibold text-slate-800 dark:text-slate-200 text-xs">🏢 ${escapeHtml(p.clientName)}</span>
+                        </td>
+                        <td class="py-3.5 px-3.5 whitespace-nowrap">
+                          <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                            ${escapeHtml(p.category)}
+                          </span>
+                        </td>
+                        <td class="py-3.5 px-3.5 text-slate-600 dark:text-slate-400 font-medium whitespace-nowrap text-xs">
+                          📅 ${p.completedAt}
+                        </td>
+                        <td class="py-3.5 px-3.5 font-black text-[#026047] dark:text-emerald-400 whitespace-nowrap text-xs">
+                          ${formatINR(val)}
+                        </td>
+                        <td class="py-3.5 px-3.5 whitespace-nowrap">
+                          <span class="px-2 py-1 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 inline-flex items-center gap-1">
                             ✓ Delivered &amp; Handed Over
                           </span>
-                        </div>
-                        <div class="text-[11px] text-slate-500 mt-1 flex items-center gap-2 flex-wrap">
-                          <span>Client: <strong class="text-slate-700 dark:text-slate-300 font-semibold">${escapeHtml(p.clientName)}</strong></span>
-                          <span>•</span>
-                          <span>Value: <strong class="text-[#026047] dark:text-emerald-400 font-bold">${formatINR(val)}</strong></span>
-                          <span>•</span>
-                          <span>Completed: <strong>${p.completedAt}</strong></span>
-                        </div>
-                      </div>
-                    </div>
-                    <div class="flex items-center gap-2">
-                      ${p.repoUrl ? `<a href="${escapeHtml(p.repoUrl)}" target="_blank" class="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-[#026047] hover:text-white text-slate-700 dark:text-slate-300 font-bold text-xs transition inline-flex items-center gap-1 shadow-xs"><span>🔗</span> Code Repo</a>` : ''}
-                      ${p.demoUrl ? `<a href="${escapeHtml(p.demoUrl)}" target="_blank" class="px-3 py-1.5 rounded-lg bg-[#026047] text-white font-bold text-xs hover:bg-[#024d39] transition inline-flex items-center gap-1 shadow-xs"><span>🚀</span> Live System</a>` : ''}
-                    </div>
-                  </div>
-                  <p class="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">${escapeHtml(p.notes)}</p>
-                </div>`;
-                })
-                .join('')
-      }
+                        </td>
+                        <td class="py-3.5 px-3.5 text-right whitespace-nowrap">
+                          <div class="flex items-center justify-end gap-1.5">
+                            ${p.repoUrl ? `<a href="${escapeHtml(p.repoUrl)}" target="_blank" class="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-[#026047] hover:text-white text-slate-700 dark:text-slate-300 font-bold text-[11px] transition inline-flex items-center gap-1 shadow-xs"><span>🔗</span> Repo</a>` : ''}
+                            ${p.demoUrl ? `<a href="${escapeHtml(p.demoUrl)}" target="_blank" class="px-2.5 py-1 rounded-lg bg-[#026047] text-white font-bold text-[11px] hover:bg-[#024d39] transition inline-flex items-center gap-1 shadow-xs"><span>🚀</span> Live</a>` : ''}
+                            <button onclick="viewProjectFinance('${escapeHtml(p.id)}')" class="px-2.5 py-1 rounded-lg bg-[#ffffea] text-[#026047] border border-[#026047]/30 text-[11px] font-bold hover:bg-[#fff9c2] transition inline-flex items-center gap-1 shadow-xs cursor-pointer">
+                              <span>📊</span> P&amp;L
+                            </button>
+                          </div>
+                        </td>
+                      </tr>`;
+                  })
+                  .join('')
+          }
+        </tbody>
+      </table>
     </div>
   `;
 }
