@@ -2842,18 +2842,10 @@ function renderSidebarNav(activeTab) {
         <span>🚀</span> Projects &amp; Delivery Tracking
       </div>
 
-      <button data-nav="projects" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl ${activeTab === 'projects' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
-        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
-        <div class="flex-1 min-w-0">
-          <div class="truncate font-bold">2. Live Projects Tracker</div>
-          <div class="text-[9px] opacity-75 truncate font-normal">Track all active company projects</div>
-        </div>
-      </button>
-
-      <button data-nav="completed-projects" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl ${activeTab === 'completed-projects' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
+      <button data-nav="projects" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl ${activeTab === 'projects' || activeTab === 'completed-projects' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
         <span class="text-sm">🏆</span>
         <div class="flex-1 min-w-0">
-          <div class="truncate font-bold">3. Completed Projects</div>
+          <div class="truncate font-bold">2. Completed Project</div>
           <div class="text-[9px] opacity-75 truncate font-normal">Delivered systems, repos &amp; sign-offs</div>
         </div>
       </button>
@@ -2861,7 +2853,7 @@ function renderSidebarNav(activeTab) {
       <button data-nav="sales-done" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl ${activeTab === 'sales-done' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
         <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
         <div class="flex-1 min-w-0">
-          <div class="truncate font-bold">4. Sales Done</div>
+          <div class="truncate font-bold">3. Sales Done</div>
           <div class="text-[9px] opacity-75 truncate font-normal">Closed client deals &amp; revenue</div>
         </div>
       </button>
@@ -2869,7 +2861,7 @@ function renderSidebarNav(activeTab) {
       <button data-nav="employee-dashboard" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl ${activeTab === 'employee-dashboard' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
         <span class="text-sm">👥</span>
         <div class="flex-1 min-w-0">
-          <div class="truncate font-bold">5. Employee Work Tracker</div>
+          <div class="truncate font-bold">4. Employee Work Tracker</div>
           <div class="text-[9px] opacity-75 truncate font-normal">Track all employee tasks &amp; deliverables</div>
         </div>
       </button>
@@ -2882,7 +2874,7 @@ function renderSidebarNav(activeTab) {
       <button data-nav="financial-summary" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl ${activeTab === 'financial-summary' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
         <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
         <div class="flex-1 min-w-0">
-          <div class="truncate font-bold">6. Financial Summary</div>
+          <div class="truncate font-bold">5. Financial Summary</div>
           <div class="text-[9px] opacity-75 truncate font-normal">Monthly Performance &amp; P&L</div>
         </div>
       </button>
@@ -2935,26 +2927,18 @@ function renderSidebarNav(activeTab) {
         <span>🚀</span> Commercial &amp; Project Delivery
       </div>
 
-      <button data-nav="projects" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl ${activeTab === 'projects' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
-        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
-        <div class="flex-1 min-w-0">
-          <div class="truncate font-bold">5. Live Projects Tracker</div>
-          <div class="text-[9px] opacity-75 truncate font-normal">Products, Scopes &amp; Live Financials</div>
-        </div>
-      </button>
-
-      <button data-nav="completed-projects" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl ${activeTab === 'completed-projects' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
+      <button data-nav="projects" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl ${activeTab === 'projects' || activeTab === 'completed-projects' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
         <span class="text-sm">🏆</span>
         <div class="flex-1 min-w-0">
-          <div class="truncate font-bold">6. Completed Projects</div>
-          <div class="text-[9px] opacity-75 truncate font-normal">Delivered client solutions</div>
+          <div class="truncate font-bold">5. Completed Project</div>
+          <div class="text-[9px] opacity-75 truncate font-normal">Delivered systems, repos &amp; sign-offs</div>
         </div>
       </button>
 
       <button data-nav="sales-done" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl ${activeTab === 'sales-done' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
         <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
         <div class="flex-1 min-w-0">
-          <div class="truncate font-bold">7. Sales Done</div>
+          <div class="truncate font-bold">6. Sales Done</div>
           <div class="text-[9px] opacity-75 truncate font-normal">Closed client deals &amp; sales</div>
         </div>
       </button>
@@ -2962,7 +2946,7 @@ function renderSidebarNav(activeTab) {
       <button data-nav="expense-management" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl ${activeTab === 'expense-management' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
         <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
         <div class="flex-1 min-w-0">
-          <div class="truncate font-bold">8. Expense Management</div>
+          <div class="truncate font-bold">7. Expense Management</div>
           <div class="text-[9px] opacity-75 truncate font-normal">Approvals &amp; Cost Control</div>
         </div>
       </button>
@@ -2970,7 +2954,7 @@ function renderSidebarNav(activeTab) {
       <button data-nav="financial-summary" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl ${activeTab === 'financial-summary' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
         <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
         <div class="flex-1 min-w-0">
-          <div class="truncate font-bold">9. Financial Summary</div>
+          <div class="truncate font-bold">8. Financial Summary</div>
           <div class="text-[9px] opacity-75 truncate font-normal">Monthly Performance &amp; P&L</div>
         </div>
       </button>
@@ -3063,11 +3047,11 @@ function renderSidebarNav(activeTab) {
         <span>🛠️</span> Tech &amp; Infrastructure
       </div>
 
-      <button data-nav="projects" class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl ${activeTab === 'projects' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
-        <span class="text-sm">📁</span>
+      <button data-nav="projects" class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl ${activeTab === 'projects' || activeTab === 'completed-projects' ? 'bg-[#fffde8] text-[#026047] font-bold shadow-sm' : 'text-[#fffde8] opacity-80 hover:opacity-100 hover:bg-[#024d39]'} transition-all text-left">
+        <span class="text-sm">🏆</span>
         <div class="flex-1 min-w-0">
-          <div class="truncate font-bold">3. Live Projects Tracker</div>
-          <div class="text-[9px] opacity-75 truncate font-normal">Architecture &amp; Systems Stack</div>
+          <div class="truncate font-bold">3. Completed Project</div>
+          <div class="text-[9px] opacity-75 truncate font-normal">Delivered systems &amp; repositories</div>
         </div>
       </button>
 
@@ -6367,18 +6351,34 @@ function renderAllocatedWork() {
             `;
           }
         } else if (task.status === 'assigned') {
-          actionControl = `
-            <button onclick="updateTaskStatus('${tId}', 'in_progress')"
-              class="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition flex items-center gap-1.5 shadow-sm">
-              <span>▶️</span> Start Work
-            </button>
-          `;
+          if (task.assignedTo === 'mem-02' || STATE.activeRole === 'arshad') {
+            actionControl = `
+              <button onclick="openArshadQCReviewModal('${safeId(task.leadId || tId)}')"
+                class="px-3.5 py-1.5 rounded-lg bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs transition flex items-center gap-1.5 shadow-sm cursor-pointer">
+                <span>🔍</span> Check Project &amp; QC Review
+              </button>
+            `;
+          } else {
+            actionControl = `
+              <button onclick="updateTaskStatus('${tId}', 'in_progress')"
+                class="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition flex items-center gap-1.5 shadow-sm">
+                <span>▶️</span> Start Work
+              </button>
+            `;
+          }
         } else if (task.status === 'in_progress') {
           if (task.assignedTo === 'mem-03' || STATE.activeRole === 'vivek') {
             actionControl = `
               <button onclick="forwardVivekTaskToArshad('${tId}')"
                 class="px-3.5 py-1.5 rounded-lg bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs transition flex items-center gap-1.5 shadow-sm">
                 <span>📤</span> Complete &amp; Forward to Arshad
+              </button>
+            `;
+          } else if (task.assignedTo === 'mem-02' || STATE.activeRole === 'arshad') {
+            actionControl = `
+              <button onclick="openArshadQCReviewModal('${safeId(task.leadId || tId)}')"
+                class="px-3.5 py-1.5 rounded-lg bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs transition flex items-center gap-1.5 shadow-sm cursor-pointer">
+                <span>🔍</span> Check Project &amp; QC Review
               </button>
             `;
           } else {
@@ -6560,14 +6560,14 @@ function renderSingleLeadCard(rawLead, currentRole) {
     currentStageText = 'Stage 2: Technical Dept In Progress';
     badgeColor = 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border-blue-300 animate-pulse';
   } else if (lead.status === 'forwarded_to_arshad' || lead.status === 'sent_to_arshad_notified_founder') {
-    currentStageText = 'Stage 3: Forwarded to Commercial & Marketing Dept';
-    badgeColor = 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-300';
+    currentStageText = 'Stage 3: Arshad CTO Quality Check & Inspection';
+    badgeColor = 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border-purple-300 animate-pulse';
   } else if (lead.status === 'commercial_in_progress') {
-    currentStageText = 'Stage 3: Commercial & Marketing Dept Packaging In Progress';
-    badgeColor = 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-300 animate-pulse';
+    currentStageText = 'Stage 3: Arshad CTO Quality Check & Inspection';
+    badgeColor = 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border-purple-300 animate-pulse';
   } else if (lead.status === 'awaiting_founder_market_approval') {
-    currentStageText = 'Stage 4: Commercial Ready • Awaiting Market Publication';
-    badgeColor = 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-300 animate-pulse';
+    currentStageText = 'Stage 4: Final Submission Marked • Awaiting Founder Delivery';
+    badgeColor = 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300 animate-pulse';
   } else if (lead.status === 'published_to_market' || lead.status === 'approved_for_delivery') {
     currentStageText = 'Stage 4: Approved & Published in Market';
     badgeColor = 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300';
@@ -6612,25 +6612,21 @@ function renderSingleLeadCard(rawLead, currentRole) {
         <span>📤</span> Complete &amp; Forward to Arshad
       </button>
     `;
-  } else if ((lead.status === 'forwarded_to_arshad' || (lead.status === 'sent_to_arshad_notified_founder' && !lead.arshadChecked)) && (isArshad || isPranav)) {
+  } else if ((lead.status === 'forwarded_to_arshad' || lead.status === 'commercial_in_progress' || (lead.status === 'sent_to_arshad_notified_founder' && !lead.arshadChecked)) && (isArshad || isPranav)) {
     actionButtons = `
-      <button onclick="startArshadCommercialWork('${lid}')"
-        class="px-3.5 py-1.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs transition shadow-sm flex items-center gap-1.5 cursor-pointer">
-        <span>🤝</span> Start Commercial Packaging
-      </button>
-    `;
-  } else if (lead.status === 'commercial_in_progress' && (isArshad || isPranav)) {
-    actionButtons = `
-      <button onclick="openArshadSubmitModal('${lid}')"
-        class="px-3.5 py-1.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs transition shadow-sm flex items-center gap-1.5 cursor-pointer">
-        <span>👑</span> Complete &amp; Submit for Market Clearance
+      <button onclick="openArshadQCReviewModal('${lid}')"
+        class="px-3.5 py-1.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs transition shadow-sm flex items-center gap-1.5 cursor-pointer">
+        <span>🔍</span> Check Project &amp; QC Review
       </button>
     `;
   } else if ((lead.status === 'awaiting_founder_market_approval' || lead.status === 'sent_to_arshad_notified_founder') && (isPranav || isArshad)) {
     actionButtons = `
+      <span class="px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 text-xs font-bold inline-flex items-center gap-1">
+        <span>✅</span> Final Submission Marked
+      </span>
       <button onclick="openDeliveryApprovalModal('${lid}')"
         class="px-3.5 py-1.5 rounded-xl bg-[#026047] hover:bg-[#024d39] text-[#fffde8] font-black text-xs transition shadow-sm flex items-center gap-1.5 cursor-pointer">
-        <span>🏆</span> Verify &amp; Publish in Market for Sale
+        <span>🏆</span> Authorize Final Delivery
       </button>
     `;
   } else if (lead.status === 'published_to_market' || lead.status === 'approved_for_delivery') {
@@ -7404,26 +7400,99 @@ window.startArshadCommercialWork = function (leadId) {
   renderSidebarNav(STATE.currentTab);
 };
 
-window.openArshadSubmitModal = function (leadId) {
+window.openArshadQCReviewModal = function (leadId) {
+  if (!leadId) return;
   const lead = (STATE.leads || []).find((l) => l.id === leadId);
   if (!lead) return;
 
   const idEl = document.getElementById('arshad-submit-lead-id');
   if (idEl) idEl.value = lead.id;
 
-  const displayEl = document.getElementById('arshad-submit-client-display');
-  if (displayEl) displayEl.textContent = `${lead.clientName} (${lead.productType} • ${formatINR(lead.dealValue)})`;
+  const displayEl = document.getElementById('arshad-submit-lead-client-display');
+  if (displayEl) displayEl.textContent = `${lead.clientName} (${lead.productType || 'Technology Solution'} • ${formatINR(lead.dealValue)})`;
+
+  const urlEl = document.getElementById('arshad-qc-deliverable-url');
+  if (urlEl) {
+    if (lead.deliverableUrl) {
+      urlEl.href = sanitizeUrl(lead.deliverableUrl) || lead.deliverableUrl;
+      urlEl.textContent = '🔗 Open Deliverable / Code';
+      urlEl.classList.remove('pointer-events-none', 'opacity-50');
+    } else {
+      urlEl.href = '#';
+      urlEl.textContent = 'Internal Build (No External URL)';
+      urlEl.classList.add('pointer-events-none', 'opacity-50');
+    }
+  }
+
+  const notesDisplayEl = document.getElementById('arshad-qc-vivek-notes');
+  if (notesDisplayEl) {
+    notesDisplayEl.textContent = lead.techNotes || 'Technical implementation completed by Vivek Gajdhane.';
+  }
+
+  // Default selection is "fine"
+  selectArshadQCOption('fine');
 
   const notesEl = document.getElementById('arshad-commercial-notes');
-  if (notesEl) notesEl.value = lead.commercialNotes || '';
+  if (notesEl) {
+    notesEl.value = lead.commercialNotes || 'Code quality, deployment readiness & architecture fully verified. Totally fine with zero pending changes.';
+  }
 
   const modal = document.getElementById('modal-arshad-submit-founder');
   if (modal) modal.classList.remove('hidden');
 };
+window.openArshadSubmitModal = window.openArshadQCReviewModal;
 
 window.closeArshadSubmitModal = function () {
   const modal = document.getElementById('modal-arshad-submit-founder');
   if (modal) modal.classList.add('hidden');
+};
+
+STATE.arshadQCChoice = 'fine';
+window.selectArshadQCOption = function (choice) {
+  STATE.arshadQCChoice = choice;
+  const btnFine = document.getElementById('btn-qc-fine');
+  const btnChanges = document.getElementById('btn-qc-changes');
+  const hintEl = document.getElementById('qc-decision-hint');
+  const labelEl = document.getElementById('arshad-qc-notes-label');
+  const notesEl = document.getElementById('arshad-commercial-notes');
+  const submitBtn = document.getElementById('arshad-qc-final-submit-btn');
+  const returnBtn = document.getElementById('arshad-qc-request-changes-btn');
+
+  if (choice === 'fine') {
+    if (btnFine) {
+      btnFine.className = 'p-2.5 rounded-xl border-2 border-[#026047] bg-white dark:bg-slate-900 text-[#026047] dark:text-emerald-400 font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition';
+    }
+    if (btnChanges) {
+      btnChanges.className = 'p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 font-medium text-xs flex items-center justify-center gap-1.5 shadow-sm transition hover:border-amber-500';
+    }
+    if (hintEl) {
+      hintEl.textContent = 'Deliverable is verified and totally fine. Ready for final submission to Founder Pranav.';
+      hintEl.className = 'text-[11px] text-[#026047] dark:text-emerald-400 font-medium';
+    }
+    if (labelEl) labelEl.textContent = 'Quality Check Sign-off Notes *';
+    if (notesEl && (!notesEl.value || notesEl.value.includes('Specify required'))) {
+      notesEl.value = 'Code quality, deployment readiness & architecture fully verified. Totally fine with zero pending changes.';
+    }
+    if (submitBtn) submitBtn.classList.remove('hidden');
+    if (returnBtn) returnBtn.classList.add('hidden');
+  } else {
+    if (btnChanges) {
+      btnChanges.className = 'p-2.5 rounded-xl border-2 border-amber-600 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition';
+    }
+    if (btnFine) {
+      btnFine.className = 'p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 font-medium text-xs flex items-center justify-center gap-1.5 shadow-sm transition hover:border-emerald-500';
+    }
+    if (hintEl) {
+      hintEl.textContent = 'Changes identified during inspection. Enter details below to return to Vivek.';
+      hintEl.className = 'text-[11px] text-amber-700 dark:text-amber-400 font-medium';
+    }
+    if (labelEl) labelEl.textContent = 'Required Technical Changes & Revisions for Vivek *';
+    if (notesEl && notesEl.value.includes('Totally fine')) {
+      notesEl.value = '';
+    }
+    if (submitBtn) submitBtn.classList.add('hidden');
+    if (returnBtn) returnBtn.classList.remove('hidden');
+  }
 };
 
 window.confirmArshadSubmitToFounder = function () {
@@ -7436,32 +7505,113 @@ window.confirmArshadSubmitToFounder = function () {
 
   lead.status = 'awaiting_founder_market_approval';
   lead.stage = 'awaiting_founder_market_approval';
-  lead.commercialNotes = commercialNotes || 'Final QC passed. Code quality, architecture & delivery readiness verified.';
+  lead.qcStatus = 'totally_fine';
+  lead.commercialNotes = commercialNotes || 'Code quality, architecture & deliverables verified. Totally fine with zero pending changes.';
   lead.commercialCompletedAt = new Date().toISOString();
   lead.qcSignedOffBy = 'Arshad Shaikh (Co-Founder & CTO)';
   lead.qcSignedOffAt = new Date().toISOString();
   lead.arshadChecked = true;
 
+  // Complete Arshad's QC task
   const arshadTask = (STATE.assignedTasks || []).find((t) => t.leadId === lead.id && t.assignedTo === 'mem-02');
   if (arshadTask) {
-    arshadTask.status = 'review_pending';
+    arshadTask.status = 'completed';
+    arshadTask.completedDate = new Date().toISOString().split('T')[0];
+    arshadTask.notes = `Final QC completed by Arshad Shaikh (Totally Fine - No Changes Needed). Marked as Final Submission.`;
     saveAssignedTasksToStorage();
     syncAssignedTaskToSupabase(arshadTask);
   }
 
   saveLeadsToStorage();
   recordAuditLog(
-    'QC_SIGNED_OFF_FORWARDED_TO_FOUNDER',
-    `Arshad Shaikh (Co-Founder & CTO) signed off Final QC for "${lead.clientName}" and forwarded to Founder Pranav Bansode for Final Delivery.`,
+    'QC_FINAL_SUBMISSION',
+    `Arshad Shaikh (Co-Founder & CTO) verified deliverable for "${lead.clientName}" as Totally Fine and marked Final Submission for Founder delivery.`,
     'Arshad Shaikh (Co-Founder & CTO)'
   );
   saveAppStateToStorage();
   syncLeadToSupabase(lead);
 
   createNotification({
-    type: 'QC_SIGNED_OFF_TO_FOUNDER',
-    title: `🏆 QC Passed: ${lead.clientName}`,
-    message: `Arshad Shaikh verified Final QC for "${lead.clientName}" (${formatINR(lead.dealValue)}). Forwarded to Founder Pranav for Final Delivery.`,
+    type: 'QC_FINAL_SUBMISSION',
+    title: `🚀 Final Submission Marked: ${lead.clientName}`,
+    message: `Arshad Shaikh verified technical deliverables (Totally Fine - No Changes) and marked Final Submission for "${lead.clientName}". Ready for Founder Final Delivery.`,
+    targetRole: 'founders',
+    leadId: lead.id,
+    actor: 'Arshad Shaikh',
+    actorRole: 'arshad'
+  });
+
+  if (notesEl) notesEl.value = '';
+  closeArshadSubmitModal();
+  showToast(`🚀 "${lead.clientName}" marked as Final Submission! Forwarded to Founder Pranav for Final Delivery.`);
+
+  renderCurrentTab();
+  renderSidebarNav(STATE.currentTab);
+};
+
+window.requestVivekChanges = function () {
+  const leadId = document.getElementById('arshad-submit-lead-id')?.value;
+  const notesEl = document.getElementById('arshad-commercial-notes');
+  const revisionNotes = notesEl ? notesEl.value.trim() : '';
+
+  if (!revisionNotes) {
+    alert('Please enter specific revision notes explaining what changes Vivek needs to make.');
+    return;
+  }
+
+  const lead = (STATE.leads || []).find((l) => l.id === leadId);
+  if (!lead) return;
+
+  lead.status = 'tech_in_progress';
+  lead.stage = 'tech_in_progress';
+  lead.qcStatus = 'changes_required';
+  lead.revisionNotes = revisionNotes;
+  lead.arshadChecked = false;
+
+  // Re-open or update task for Vivek
+  let vivekTask = (STATE.assignedTasks || []).find((t) => t.leadId === lead.id && (t.assignedTo === 'mem-03' || !t.assignedTo));
+  if (vivekTask) {
+    vivekTask.status = 'in_progress';
+    vivekTask.title = `Revision Required: ${lead.clientName}`;
+    vivekTask.description = `CTO Arshad Shaikh checked project and requested revisions: ${revisionNotes}`;
+    vivekTask.notes = revisionNotes;
+    saveAssignedTasksToStorage();
+    syncAssignedTaskToSupabase(vivekTask);
+  } else {
+    vivekTask = {
+      id: 'task-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+      title: `Revision Required: ${lead.clientName}`,
+      description: `CTO Arshad Shaikh checked project and requested revisions: ${revisionNotes}`,
+      assignedTo: 'mem-03',
+      assignedToName: 'Vivek Gajdhane',
+      assignedBy: 'Arshad Shaikh (Co-Founder & CTO)',
+      department: 'Technical Department',
+      projectId: lead.projectId || 'prj-godownpro',
+      projectName: lead.productType || 'Technology Solution',
+      priority: 'HIGH',
+      status: 'in_progress',
+      leadId: lead.id,
+      assignedDate: new Date().toISOString().split('T')[0],
+      dueDate: lead.expectedCloseDate || new Date(Date.now() + 5 * 86400000).toISOString().split('T')[0]
+    };
+    STATE.assignedTasks.unshift(vivekTask);
+    saveAssignedTasksToStorage();
+    syncAssignedTaskToSupabase(vivekTask);
+  }
+
+  saveLeadsToStorage();
+  recordAuditLog(
+    'QC_REVISION_REQUESTED',
+    `Arshad Shaikh (Co-Founder & CTO) requested technical revisions from Vivek on "${lead.clientName}": ${revisionNotes}`,
+    'Arshad Shaikh (Co-Founder & CTO)'
+  );
+  saveAppStateToStorage();
+  syncLeadToSupabase(lead);
+
+  createNotification({
+    type: 'QC_REVISION_REQUESTED',
+    title: `⚠️ Revision Requested: ${lead.clientName}`,
+    message: `Arshad Shaikh inspected deliverables and requested changes: "${revisionNotes}". Returned to Vivek.`,
     targetRole: 'all',
     leadId: lead.id,
     actor: 'Arshad Shaikh',
@@ -7470,7 +7620,7 @@ window.confirmArshadSubmitToFounder = function () {
 
   if (notesEl) notesEl.value = '';
   closeArshadSubmitModal();
-  showToast(`🏆 Final QC signed off for "${lead.clientName}"! Forwarded to Founder for Final Delivery.`);
+  showToast(`↩️ Revision feedback sent directly to Vivek Gajdhane. Founder notified.`);
 
   renderCurrentTab();
   renderSidebarNav(STATE.currentTab);
@@ -8207,37 +8357,104 @@ function renderProjects() {
     return;
   }
 
-  // SUB-VIEW: LIVE PRODUCTS LIST (Active in-progress initiatives like PRP-GodownPro)
-  const liveProjects = allProjects.filter((p) => p.status !== 'completed');
-  let visibleProjects = liveProjects;
+  // SUB-VIEW: COMPLETED PROJECTS & DELIVERABLES (Finished systems, repos & client sign-offs)
+  const completedLeads = (STATE.leads || []).filter(
+    (l) => l.status === 'published_to_market' || l.status === 'approved_for_delivery' || l.stage === 'published_to_market'
+  );
+
+  const completedArchived = [
+    {
+      id: 'comp-prj-01',
+      code: 'PRJ-LEADX',
+      name: 'LeadX Enterprise Core Engine v1.0',
+      clientName: 'Apex Capital Solutions',
+      category: 'B2B Client Acquisition Engine',
+      completedAt: '2026-10-18',
+      dealValue: 185000,
+      techLead: 'Vivek Gajdhane (Technical Lead)',
+      commercialLead: 'Arshad Shaikh (Co-Founder & CTO)',
+      repoUrl: 'https://github.com/phoenixtech/leadx-core',
+      demoUrl: 'https://leadx.phoenixtech.com',
+      notes: 'Full production deployment completed with automated lead capture & verified deliverable handover.',
+      badge: 'Delivered & Handed Over'
+    },
+    {
+      id: 'comp-prj-02',
+      code: 'PRJ-SRM',
+      name: 'Smart Review Management Sentiment Funnel',
+      clientName: 'Grand Horizon Hospitality Group',
+      category: 'Customer Intelligence & Review Interception',
+      completedAt: '2026-11-04',
+      dealValue: 95000,
+      techLead: 'Vivek Gajdhane (Technical Lead)',
+      commercialLead: 'Arshad Shaikh (Co-Founder & CTO)',
+      repoUrl: 'https://github.com/phoenixtech/srm-sentiment-engine',
+      demoUrl: 'https://srm.phoenixtech.com',
+      notes: 'Private feedback interception gateway deployed, QR integration validated, and staff dashboard operational.',
+      badge: 'Delivered & Handed Over'
+    }
+  ];
+
+  const dynamicCompleted = completedLeads.map((l) => ({
+    id: l.id,
+    code: l.leadNumber || 'PTS-DEAL',
+    name: `${l.clientName} - ${l.productType || 'Custom Solution'}`,
+    clientName: l.clientName,
+    category: l.productType || 'Custom Tech Development',
+    completedAt: l.approvedAt ? l.approvedAt.split('T')[0] : (l.submittedAt ? l.submittedAt.split('T')[0] : '2026-11-15'),
+    dealValue: Number(l.dealValue) || 0,
+    techLead: 'Vivek Gajdhane (Technical Lead)',
+    commercialLead: 'Arshad Shaikh (Co-Founder & CTO)',
+    repoUrl: l.deliverableUrl || 'https://github.com/phoenixtech/client-delivery',
+    demoUrl: l.demoUrl || '',
+    notes: l.deliveryNotes || l.techNotes || 'Successfully engineered, packaged, and published in market.',
+    badge: 'Delivered & Handed Over'
+  }));
+
+  const allCompleted = [...completedArchived, ...dynamicCompleted];
+  let visibleProjects = allCompleted;
 
   if (STATE.projectListSearch) {
     visibleProjects = visibleProjects.filter((p) => {
-      const details = techDetails[p.id] || {};
-      const haystack = `${p.name} ${p.code} ${p.description} ${details.category || ''} ${(
-        details.techStack || []
-      ).join(' ')}`.toLowerCase();
-      return haystack.includes(STATE.projectListSearch);
+      const haystack = `${p.name} ${p.code} ${p.clientName} ${p.category} ${p.notes}`.toLowerCase();
+      return haystack.includes(STATE.projectListSearch.toLowerCase());
     });
   }
+
+  const totalRevenue = allCompleted.reduce((sum, p) => sum + (Number(p.dealValue) || 0), 0);
 
   container.innerHTML = `
     <!-- Top Section Header -->
     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
       <div class="flex items-center gap-2">
-        <span class="px-2 py-0.5 rounded text-[10px] font-black bg-[#026047] text-[#fffde8] uppercase tracking-wider">Live Projects</span>
-        <h2 class="text-base font-bold text-slate-900 dark:text-white">Active In-Progress Products</h2>
-        <span class="text-xs text-slate-400 font-semibold">(${liveProjects.length} In-Progress)</span>
+        <span class="px-2 py-0.5 rounded text-[10px] font-black bg-[#026047] text-[#fffde8] uppercase tracking-wider">Completed Project</span>
+        <h2 class="text-base font-bold text-slate-900 dark:text-white">Completed Projects &amp; Deliverables</h2>
+        <span class="text-xs text-slate-400 font-semibold">(${allCompleted.length} Completed)</span>
       </div>
       <div class="flex items-center gap-2 self-start sm:self-auto flex-wrap">
         <button onclick="viewProjectFinance('ALL')"
           class="px-3.5 py-1.5 rounded-2xl bg-[#ffffea] text-[#026047] border border-[#026047]/30 font-bold text-xs hover:bg-[#fff9c2] transition flex items-center gap-1.5 shadow-sm cursor-pointer">
           <span>📊</span> View Financials
         </button>
-        <button onclick="openNewProjectModal()"
-          class="px-3.5 py-1.5 rounded-lg bg-[#026047] text-[#fffde8] font-bold text-xs hover:bg-[#024d39] transition cursor-pointer">
-          + New Product
-        </button>
+      </div>
+    </div>
+
+    <!-- Summary Metrics -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <span class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Completed Deliverables</span>
+        <div class="text-2xl font-black text-[#026047] dark:text-emerald-400 mt-1">${allCompleted.length} Finished</div>
+        <span class="text-[10px] text-emerald-600 font-semibold block mt-0.5">100% Verified Handover</span>
+      </div>
+      <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <span class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Delivered Contract Sum</span>
+        <div class="text-2xl font-black text-slate-900 dark:text-white mt-1">${formatINR(totalRevenue)}</div>
+        <span class="text-[10px] text-slate-500 font-medium block mt-0.5">Recognized Closed Revenue</span>
+      </div>
+      <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <span class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Technical Sign-off</span>
+        <div class="text-2xl font-black text-purple-600 dark:text-purple-400 mt-1">100%</div>
+        <span class="text-[10px] text-purple-500 font-semibold block mt-0.5">CTO &amp; Architect Verified</span>
       </div>
     </div>
 
@@ -8247,7 +8464,7 @@ function renderProjects() {
         <div class="relative flex-1 sm:w-64">
           <input
             type="text"
-            placeholder="Search active live products..."
+            placeholder="Search completed projects & deliverables..."
             value="${escapeHtml(STATE.projectListSearch || '')}"
             oninput="handleProjectSearch(this.value)"
             class="w-full pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:outline-none focus:border-[#026047]"
@@ -8256,50 +8473,58 @@ function renderProjects() {
         </div>
         <div class="flex items-center gap-1">
           <button onclick="filterProjectList('ALL')" class="px-2.5 py-1 rounded-lg bg-[#026047] text-[#fffde8] font-bold shadow-sm transition text-xs cursor-pointer">
-            All Live Products (${liveProjects.length})
+            All Completed Projects (${allCompleted.length})
           </button>
         </div>
       </div>
     </div>
 
-    <!-- Designed Products Minimal List -->
+    <!-- Completed Projects List -->
     <div class="space-y-3">
       ${
         visibleProjects.length === 0
             ? `<div class="p-12 text-center text-slate-400 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
                <span class="text-3xl block mb-2">🔍</span>
-               <p class="font-semibold text-slate-600 dark:text-slate-300">No designed products match your search or filter.</p>
+               <p class="font-semibold text-slate-600 dark:text-slate-300">No completed projects match your search or filter.</p>
                <button onclick="filterProjectList('ALL'); handleProjectSearch('');" class="mt-3 px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-300">Reset Filters</button>
              </div>`
             : visibleProjects
                 .map((p, idx) => {
-                  const pId = safeId(p.id);
                   const itemNum = String(idx + 1).padStart(2, '0');
-                  const displayName = `${idx + 1}) ${escapeHtml(p.name)}`;
-                  const fin = getProjectFinancials(p.id);
-                  const netProfit = fin.received - fin.expenses;
-                  const isProfit = netProfit >= 0;
+                  const val = Number(p.dealValue) || 0;
 
                   return `
-                <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between gap-3 hover:border-[#026047] transition">
-                  <div class="flex items-center gap-3">
-                    <div class="w-9 h-9 rounded-xl bg-[#026047] text-white font-black text-xs flex items-center justify-center shadow-sm shrink-0">
-                      ${itemNum}
+                <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:border-[#026047] transition space-y-3">
+                  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+                    <div class="flex items-center gap-3">
+                      <div class="w-10 h-10 rounded-xl bg-[#026047] text-[#fffde8] font-black text-xs flex items-center justify-center shadow-xs shrink-0">
+                        ${itemNum}
+                      </div>
+                      <div>
+                        <div class="flex items-center gap-2 flex-wrap">
+                          <h3 class="text-sm font-extrabold text-slate-900 dark:text-white">${escapeHtml(p.name)}</h3>
+                          <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#fffde8] text-[#026047] border border-[#026047]/30">
+                            ${escapeHtml(p.code)}
+                          </span>
+                          <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                            ✓ Delivered &amp; Handed Over
+                          </span>
+                        </div>
+                        <div class="text-[11px] text-slate-500 mt-1 flex items-center gap-2 flex-wrap">
+                          <span>Client: <strong class="text-slate-700 dark:text-slate-300 font-semibold">${escapeHtml(p.clientName)}</strong></span>
+                          <span>•</span>
+                          <span>Value: <strong class="text-[#026047] dark:text-emerald-400 font-bold">${formatINR(val)}</strong></span>
+                          <span>•</span>
+                          <span>Completed: <strong>${p.completedAt}</strong></span>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <div class="flex items-center gap-2">
-                        <h3 class="text-sm font-bold text-slate-900 dark:text-white">${displayName}</h3>
-                        <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#fffde8] text-[#026047] border border-[#026047]/30">${escapeHtml(p.code)}</span>
-                      </div>
-                      <div class="text-[11px] text-slate-500 mt-1 flex items-center gap-2 flex-wrap">
-                        <span>Inflow: <strong class="text-[#026047] dark:text-emerald-400">${formatINR(fin.received)}</strong></span>
-                        <span>•</span>
-                        <span>Costs: <strong class="text-rose-600 dark:text-rose-400">${formatINR(fin.expenses)}</strong></span>
-                        <span>•</span>
-                        <span>Net: <strong class="${isProfit ? 'text-[#026047] dark:text-emerald-400' : 'text-rose-600'}">${formatINR(netProfit)}</strong></span>
-                      </div>
+                    <div class="flex items-center gap-2">
+                      ${p.repoUrl ? `<a href="${escapeHtml(p.repoUrl)}" target="_blank" class="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-[#026047] hover:text-white text-slate-700 dark:text-slate-300 font-bold text-xs transition inline-flex items-center gap-1 shadow-xs"><span>🔗</span> Code Repo</a>` : ''}
+                      ${p.demoUrl ? `<a href="${escapeHtml(p.demoUrl)}" target="_blank" class="px-3 py-1.5 rounded-lg bg-[#026047] text-white font-bold text-xs hover:bg-[#024d39] transition inline-flex items-center gap-1 shadow-xs"><span>🚀</span> Live System</a>` : ''}
                     </div>
                   </div>
+                  <p class="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">${escapeHtml(p.notes)}</p>
                 </div>`;
                 })
                 .join('')
@@ -8308,6 +8533,7 @@ function renderProjects() {
   `;
 }
 window.renderProjects = renderProjects;
+window.renderCompletedProjects = renderProjects;
 
 function renderProjectFinance() {
   STATE.projectSubView = 'finance';
